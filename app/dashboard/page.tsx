@@ -1,15 +1,14 @@
-import { currentUser } from "@clerk/nextjs/server";
+// app/dashboard/page.tsx
+import { auth } from "@clerk/nextjs/server";
+import { redirect } from "next/navigation";
+import Dashboard from "./Dashboard"; // komponen client
 
 export default async function DashboardPage() {
-    const user = await currentUser();
+    const { userId } = await auth();
 
-    return (
-        <div className="p-6">
-            <h1 className="text-2xl font-bold">
-                Halo, {user?.firstName || "User"} 👋
-            </h1>
-            <p className="mt-2 text-gray-600">Selamat datang di Dompetin Dashboard</p>
-            {/* Nanti kita tambahkan TransactionForm + TransactionList di sini */}
-        </div>
-    );
+    if (!userId) {
+        redirect("/"); // kalau belum login, balik ke halaman utama
+    }
+
+    return <Dashboard />; // kalau login, render dashboard
 }
