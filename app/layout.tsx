@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
+import { Outfit } from "next/font/google";
 import { ClerkProvider } from "@clerk/nextjs";
 import "./globals.css";
+
+const outfit = Outfit({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
   title: "Budgetly 💰",
@@ -15,7 +18,7 @@ export default function RootLayout({
   return (
     <ClerkProvider>
       <html lang="en">
-        <body className="bg-gray-50 text-gray-900">
+        <body className={`${outfit.className} bg-gray-50 text-gray-900 antialiased`}>
           {children}
         </body>
       </html>

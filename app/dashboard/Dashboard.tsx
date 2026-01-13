@@ -2,6 +2,19 @@
 
 import { useEffect, useState } from "react";
 import { UserButton } from "@clerk/nextjs";
+import {
+    ArrowUpCircle,
+    ArrowDownCircle,
+    Wallet,
+    PlusCircle,
+    History,
+    TrendingUp,
+    TrendingDown,
+    Pencil,
+    Trash2,
+    Calendar,
+    XCircle
+} from "lucide-react";
 
 interface Transaction {
     id: number;
@@ -14,54 +27,138 @@ interface Transaction {
 export default function Dashboard() {
     const [transactions, setTransactions] = useState<Transaction[]>([]);
     const [description, setDescription] = useState("");
-    const [amount, setAmount] = useState<number>(0);
+    const [amount, setAmount] = useState<number | "">("");
     const [type, setType] = useState<"income" | "expense">("income");
+    const [date, setDate] = useState(new Date().toISOString().split("T")[0]); // Default today
+    const [editingId, setEditingId] = useState<number | null>(null);
+
+    // Filter State
     const [activeFilter, setActiveFilter] = useState<"all" | "income" | "expense">("all");
+    const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7)); // YYYY-MM
+    const [loading, setLoading] = useState(false);
 
     // 🚀 Load data dari JSON via API
     useEffect(() => {
         fetch("/api/transactions")
             .then((res) => res.json())
-            .then((data) => setTransactions(data));
+            .then((data) => {
+                if (Array.isArray(data)) {
+                    setTransactions(data);
+                } else {
+                    console.error("Failed to fetch transactions:", data);
+                    setTransactions([]);
+                }
+            })
+            .catch(err => {
+                console.error("Network error:", err);
+                setTransactions([]);
+            });
     }, []);
 
-    // 💰 Tambah transaksi
-    const addTransaction = async () => {
-        if (!description || !amount) return;
+    // 💰 Tambah / Edit Transaksi
+    const saveTransaction = async () => {
+        if (!description || !amount || !date) return;
+        setLoading(true);
 
-        const newTransaction = {
+        const transactionData = {
             type,
             description,
-            amount,
+            amount: Number(amount),
+            date: new Date(date).toISOString(),
         };
 
-        const res = await fetch("/api/transactions", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(newTransaction),
-        });
+        try {
+            let res;
+            if (editingId) {
+                // Edit Mode (PUT)
+                res = await fetch("/api/transactions", {
+                    method: "PUT",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ id: editingId, ...transactionData }),
+                });
+            } else {
+                // Add Mode (POST)
+                res = await fetch("/api/transactions", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(transactionData),
+                });
+            }
 
-        const saved = await res.json();
-        setTransactions([saved, ...transactions]);
+            const saved = await res.json();
 
-        setDescription("");
-        setAmount(0);
+            if (res.ok) {
+                if (editingId) {
+                    setTransactions(transactions.map(t => t.id === editingId ? saved : t));
+                    alert("Transaksi berhasil diupdate!");
+                } else {
+                    setTransactions([saved, ...transactions]);
+                }
+                resetForm();
+            } else {
+                alert("Gagal menyimpan transaksi: " + (saved.error || "Unknown error"));
+            }
+        } catch (error) {
+            console.error("Save error:", error);
+            alert("Terjadi kesalahan jaringan");
+        }
+        setLoading(false);
     };
 
-    const income = transactions
+    const deleteTransaction = async (id: number) => {
+        if (!confirm("Yakin mau hapus transaksi ini?")) return;
+
+        try {
+            const res = await fetch(`/api/transactions?id=${id}`, {
+                method: "DELETE",
+            });
+
+            if (res.ok) {
+                setTransactions(transactions.filter(t => t.id !== id));
+            } else {
+                alert("Gagal menghapus transaksi");
+            }
+        } catch (error) {
+            console.error("Delete error:", error);
+        }
+    };
+
+    const resetForm = () => {
+        setDescription("");
+        setAmount("");
+        setType("income");
+        setDate(new Date().toISOString().split("T")[0]);
+        setEditingId(null);
+    };
+
+    const handleEdit = (t: Transaction) => {
+        setDescription(t.description);
+        setAmount(t.amount);
+        setType(t.type);
+        setDate(new Date(t.date).toISOString().split("T")[0]);
+        setEditingId(t.id);
+
+        // Scroll to top to see form
+        window.scrollTo({ top: 0, behavior: "smooth" });
+    };
+
+    // Filter Logic: Filter by Month AND Type
+    const filteredByMonth = transactions.filter(t => t.date.startsWith(selectedMonth));
+
+    // Calculate Summary based on MONTHLY data
+    const income = filteredByMonth
         .filter((t) => t.type === "income")
         .reduce((sum, t) => sum + t.amount, 0);
 
-    const expense = transactions
+    const expense = filteredByMonth
         .filter((t) => t.type === "expense")
         .reduce((sum, t) => sum + t.amount, 0);
 
     const balance = income - expense;
-
-    // Calculate remaining percentage (avoid division by zero)
     const remainingPercentage = income > 0 ? Math.round(((balance) / income) * 100) : 0;
 
-    const filteredTransactions = transactions.filter((t) => {
+    // Final list filter for display
+    const visibleTransactions = filteredByMonth.filter((t) => {
         if (activeFilter === "all") return true;
         return t.type === activeFilter;
     });
@@ -71,167 +168,270 @@ export default function Dashboard() {
     };
 
     return (
-        <main className="min-h-screen bg-gray-50 p-4 md:p-8">
-            <div className="max-w-4xl mx-auto">
-                {/* Header */}
-                <div className="flex justify-between items-center mb-8">
-                    <h1 className="text-2xl md:text-3xl font-bold text-gray-800">BUDGETLY APPS</h1>
-                    <UserButton afterSignOutUrl="/" />
-                </div>
-
-                {/* Balance Card */}
-                <div className="bg-white rounded-2xl shadow-sm p-6 md:p-8 mb-8 text-center">
-                    <h2 className="text-4xl md:text-5xl font-bold text-gray-800 mb-2">
-                        Rp. {formatRupiah(balance)},-
-                    </h2>
-                    <p className="text-gray-500 text-sm">
-                        Sisa uang kamu tersisa {remainingPercentage}% lagi
-                    </p>
-                </div>
-
-                {/* Summary Cards */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-                    <div className="bg-white rounded-2xl shadow-sm p-6">
-                        <div className="flex items-center mb-4">
-                            <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center mr-4">
-                                <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                                </svg>
+        <main className="min-h-screen bg-gray-50 pb-20">
+            {/* Navbar */}
+            <nav className="w-full bg-white/80 backdrop-blur-md border-b border-gray-200 sticky top-0 z-10">
+                <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+                    <div className="flex justify-between items-center h-16">
+                        <div className="flex items-center gap-2">
+                            <div className="bg-indigo-600 p-2 rounded-lg">
+                                <Wallet className="w-5 h-5 text-white" />
                             </div>
-                            <div>
-                                <p className="text-gray-500 text-sm">Pemasukan</p>
-                                <p className="text-2xl font-bold text-gray-800">Rp. {formatRupiah(income)},-</p>
-                                <p className="text-blue-500 text-sm">{transactions.filter(t => t.type === 'income').length} Transaksi</p>
+                            <h1 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-violet-600">
+                                Budgetly
+                            </h1>
+                        </div>
+                        <div className="flex items-center gap-4">
+                            {/* Month Selector in Navbar */}
+                            <div className="hidden sm:flex items-center bg-gray-100 rounded-lg px-2 py-1">
+                                <Calendar className="w-4 h-4 text-gray-500 mr-2" />
+                                <input
+                                    type="month"
+                                    value={selectedMonth}
+                                    onChange={(e) => setSelectedMonth(e.target.value)}
+                                    className="bg-transparent border-none text-sm font-medium text-gray-700 focus:ring-0 outline-none"
+                                />
                             </div>
+                            <UserButton afterSignOutUrl="/" />
                         </div>
                     </div>
-
-                    <div className="bg-white rounded-2xl shadow-sm p-6">
-                        <div className="flex items-center mb-4">
-                            <div className="w-12 h-12 bg-red-100 rounded-xl flex items-center justify-center mr-4">
-                                <svg className="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
-                                </svg>
-                            </div>
-                            <div>
-                                <p className="text-gray-500 text-sm">Pengeluaran</p>
-                                <p className="text-2xl font-bold text-gray-800">Rp. {formatRupiah(expense)},-</p>
-                                <p className="text-red-500 text-sm">{transactions.filter(t => t.type === 'expense').length} Transaksi</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                {/* Add Transaction Form */}
-                <div className="bg-white rounded-2xl shadow-sm p-6 mb-8">
-                    <h3 className="text-lg font-semibold text-gray-800 mb-4">Tambah Transaksi</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    {/* Mobile Month Selector */}
+                    <div className="sm:hidden pb-2">
                         <input
-                            type="text"
-                            placeholder="Deskripsi transaksi"
-                            value={description}
-                            onChange={(e) => setDescription(e.target.value)}
-                            className="px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            type="month"
+                            value={selectedMonth}
+                            onChange={(e) => setSelectedMonth(e.target.value)}
+                            className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm"
                         />
-                        <input
-                            type="number"
-                            placeholder="Jumlah"
-                            value={amount || ""}
-                            onChange={(e) => setAmount(Number(e.target.value))}
-                            className="px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        />
-                        <select
-                            value={type}
-                            onChange={(e) => setType(e.target.value as "income" | "expense")}
-                            className="px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
-                        >
-                            <option value="income">Pemasukan</option>
-                            <option value="expense">Pengeluaran</option>
-                        </select>
-                        <button
-                            onClick={addTransaction}
-                            className="px-6 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors font-medium"
-                        >
-                            Tambah
-                        </button>
                     </div>
                 </div>
+            </nav>
 
-                {/* Transaction History */}
-                <div className="bg-white rounded-2xl shadow-sm p-6">
-                    <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
-                        <h3 className="text-lg font-semibold text-gray-800 mb-4 md:mb-0">Ringkasan Transaksi</h3>
+            <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
 
-                        {/* Filter Buttons */}
-                        <div className="flex gap-2">
-                            <button
-                                onClick={() => setActiveFilter("income")}
-                                className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${activeFilter === "income"
-                                        ? "bg-blue-600 text-white"
-                                        : "bg-blue-100 text-blue-600 hover:bg-blue-200"
-                                    }`}
-                            >
-                                Pemasukan
-                            </button>
-                            <button
-                                onClick={() => setActiveFilter("expense")}
-                                className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${activeFilter === "expense"
-                                        ? "bg-red-600 text-white"
-                                        : "bg-red-100 text-red-600 hover:bg-red-200"
-                                    }`}
-                            >
-                                Pengeluaran
-                            </button>
+                {/* Hero / Balance Section */}
+                <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-indigo-600 via-purple-600 to-violet-600 p-8 text-white shadow-xl shadow-indigo-200">
+                    <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+                        <div>
+                            <p className="text-indigo-100 font-medium mb-1">
+                                Saldo Bulan {new Date(selectedMonth).toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })}
+                            </p>
+                            <h2 className="text-4xl md:text-5xl font-bold tracking-tight">
+                                Rp {formatRupiah(balance)}
+                            </h2>
+                            <div className="mt-4 flex items-center gap-2 text-sm bg-white/10 w-fit px-3 py-1 rounded-full backdrop-blur-sm border border-white/20">
+                                <span>Sisa budget: {remainingPercentage}%</span>
+                            </div>
+                        </div>
+
+                        <div className="flex gap-4">
+                            <div className="bg-white/10 backdrop-blur-md p-4 rounded-2xl border border-white/10 min-w-[140px]">
+                                <div className="flex items-center gap-2 mb-2 text-indigo-100">
+                                    <ArrowUpCircle className="w-4 h-4 text-emerald-300" />
+                                    <span className="text-sm">Pemasukan</span>
+                                </div>
+                                <p className="text-xl font-semibold">Rp {formatRupiah(income)}</p>
+                            </div>
+                            <div className="bg-white/10 backdrop-blur-md p-4 rounded-2xl border border-white/10 min-w-[140px]">
+                                <div className="flex items-center gap-2 mb-2 text-indigo-100">
+                                    <ArrowDownCircle className="w-4 h-4 text-rose-300" />
+                                    <span className="text-sm">Pengeluaran</span>
+                                </div>
+                                <p className="text-xl font-semibold">Rp {formatRupiah(expense)}</p>
+                            </div>
                         </div>
                     </div>
 
-                    {/* Transactions List */}
-                    {filteredTransactions.length === 0 ? (
-                        <div className="text-center py-12">
-                            <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                                <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                                </svg>
+                    {/* Decorative circles */}
+                    <div className="absolute top-0 right-0 -mr-20 -mt-20 w-64 h-64 rounded-full bg-white/10 blur-3xl"></div>
+                    <div className="absolute bottom-0 left-0 -ml-20 -mb-20 w-64 h-64 rounded-full bg-indigo-500/30 blur-3xl"></div>
+                </div>
+
+                {/* Main Content Grid */}
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+
+                    {/* Left Column: Input Form */}
+                    <div className="lg:col-span-1 space-y-6">
+                        <div className={`bg-white rounded-2xl shadow-sm border p-6 transition-colors ${editingId ? 'border-indigo-300 ring-2 ring-indigo-500/10' : 'border-gray-100'}`}>
+
+                            <div className="flex justify-between items-center mb-4">
+                                <h3 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
+                                    {editingId ? <Pencil className="w-5 h-5 text-indigo-600" /> : <PlusCircle className="w-5 h-5 text-indigo-600" />}
+                                    {editingId ? "Edit Transaksi" : "Tambah Transaksi"}
+                                </h3>
+                                {editingId && (
+                                    <button onClick={resetForm} className="text-xs text-rose-500 hover:text-rose-700 flex items-center gap-1 bg-rose-50 px-2 py-1 rounded-full">
+                                        <XCircle className="w-3 h-3" /> Batal
+                                    </button>
+                                )}
                             </div>
-                            <p className="text-gray-500">Belum ada transaksi</p>
-                        </div>
-                    ) : (
-                        <div className="space-y-3">
-                            {filteredTransactions.map((transaction) => (
-                                <div
-                                    key={transaction.id}
-                                    className="flex items-center justify-between p-4 border border-gray-100 rounded-xl hover:bg-gray-50 transition-colors"
-                                >
-                                    <div className="flex items-center">
-                                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center mr-4 ${transaction.type === "income"
-                                                ? "bg-blue-100"
-                                                : "bg-red-100"
-                                            }`}>
-                                            {transaction.type === "income" ? (
-                                                <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                                                </svg>
-                                            ) : (
-                                                <svg className="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3l1.664 1.664M21 21l-1.5-1.5m-5.485-1.242L12 17l-1.5-1.5m2.999-8.485c.44.44.44 1.154 0 1.596l-6.01 6.008a1.125 1.125 0 01-1.595 0l-.798-.798" />
-                                                </svg>
-                                            )}
-                                        </div>
-                                        <div>
-                                            <p className="font-medium text-gray-800">{transaction.description}</p>
-                                            <p className="text-sm text-gray-500">{transaction.date}</p>
-                                        </div>
-                                    </div>
-                                    <div className="text-right">
-                                        <p className={`text-lg font-bold ${transaction.type === "income" ? "text-blue-600" : "text-red-600"
-                                            }`}>
-                                            Rp. {transaction.type === "income" ? "+" : "-"}{formatRupiah(transaction.amount)}
-                                        </p>
+
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Tanggal</label>
+                                    <input
+                                        type="date"
+                                        value={date}
+                                        onChange={(e) => setDate(e.target.value)}
+                                        className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-sm"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Deskripsi</label>
+                                    <input
+                                        type="text"
+                                        placeholder="Cth: Beli Kopi"
+                                        value={description}
+                                        onChange={(e) => setDescription(e.target.value)}
+                                        className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-sm"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Nominal (Rp)</label>
+                                    <input
+                                        type="number"
+                                        placeholder="0"
+                                        value={amount}
+                                        onChange={(e) => setAmount(Number(e.target.value))}
+                                        className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-sm"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Tipe</label>
+                                    <div className="grid grid-cols-2 gap-2 p-1 bg-gray-100 rounded-xl">
+                                        <button
+                                            onClick={() => setType("income")}
+                                            className={`py-2 px-4 rounded-lg text-sm font-medium transition-all ${type === "income"
+                                                ? "bg-white text-indigo-600 shadow-sm"
+                                                : "text-gray-500 hover:text-gray-700"
+                                                }`}
+                                        >
+                                            Pemasukan
+                                        </button>
+                                        <button
+                                            onClick={() => setType("expense")}
+                                            className={`py-2 px-4 rounded-lg text-sm font-medium transition-all ${type === "expense"
+                                                ? "bg-white text-rose-600 shadow-sm"
+                                                : "text-gray-500 hover:text-gray-700"
+                                                }`}
+                                        >
+                                            Pengeluaran
+                                        </button>
                                     </div>
                                 </div>
-                            ))}
+                                <button
+                                    onClick={saveTransaction}
+                                    disabled={loading}
+                                    className={`w-full py-3 text-white rounded-xl font-medium shadow-lg transition-all active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed flex justify-center items-center gap-2 ${editingId
+                                            ? "bg-emerald-600 hover:bg-emerald-700 shadow-emerald-200"
+                                            : "bg-indigo-600 hover:bg-indigo-700 shadow-indigo-200"
+                                        }`}
+                                >
+                                    {loading ? "Menyimpan..." : (editingId ? "Update Transaksi" : "Simpan Transaksi")}
+                                </button>
+                            </div>
                         </div>
-                    )}
+                    </div>
+
+                    {/* Right Column: List & History */}
+                    <div className="lg:col-span-2 space-y-6">
+                        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 min-h-[500px]">
+                            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+                                <h3 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
+                                    <History className="w-5 h-5 text-indigo-600" />
+                                    Riwayat Transaksi
+                                </h3>
+                                <div className="flex gap-2">
+                                    <button
+                                        onClick={() => setActiveFilter("all")}
+                                        className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${activeFilter === "all" ? "bg-gray-900 text-white border-gray-900" : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
+                                            }`}
+                                    >
+                                        Semua
+                                    </button>
+                                    <button
+                                        onClick={() => setActiveFilter("income")}
+                                        className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${activeFilter === "income" ? "bg-emerald-100 text-emerald-700 border-emerald-200" : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
+                                            }`}
+                                    >
+                                        Pemasukan
+                                    </button>
+                                    <button
+                                        onClick={() => setActiveFilter("expense")}
+                                        className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${activeFilter === "expense" ? "bg-rose-100 text-rose-700 border-rose-200" : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
+                                            }`}
+                                    >
+                                        Pengeluaran
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div className="space-y-4">
+                                {visibleTransactions.length === 0 ? (
+                                    <div className="flex flex-col items-center justify-center py-12 text-center">
+                                        <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mb-4">
+                                            <Wallet className="w-8 h-8 text-gray-300" />
+                                        </div>
+                                        <p className="text-gray-500">Belum ada transaksi di bulan ini</p>
+                                    </div>
+                                ) : (
+                                    visibleTransactions.map((transaction) => (
+                                        <div
+                                            key={transaction.id}
+                                            className="group flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 rounded-xl hover:bg-gray-50 border border-transparent hover:border-gray-100 transition-all duration-200 gap-4"
+                                        >
+                                            <div className="flex items-center gap-4 flex-1">
+                                                <div className={`w-12 h-12 rounded-full flex items-center justify-center shrink-0 ${transaction.type === "income" ? "bg-emerald-100/50 text-emerald-600" : "bg-rose-100/50 text-rose-600"
+                                                    }`}>
+                                                    {transaction.type === "income" ? (
+                                                        <TrendingUp className="w-6 h-6" />
+                                                    ) : (
+                                                        <TrendingDown className="w-6 h-6" />
+                                                    )}
+                                                </div>
+                                                <div>
+                                                    <p className="font-semibold text-gray-900 group-hover:text-indigo-600 transition-colors">
+                                                        {transaction.description}
+                                                    </p>
+                                                    <div className="flex items-center gap-2 text-xs text-gray-500">
+                                                        <Calendar className="w-3 h-3" />
+                                                        {new Date(transaction.date).toLocaleDateString("id-ID", {
+                                                            day: "numeric", month: "long", year: "numeric"
+                                                        })}
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div className="flex items-center justify-between w-full sm:w-auto gap-6">
+                                                <p className={`font-bold whitespace-nowrap ${transaction.type === "income" ? "text-emerald-600" : "text-gray-900"
+                                                    }`}>
+                                                    {transaction.type === "income" ? "+" : "-"} Rp {formatRupiah(transaction.amount)}
+                                                </p>
+
+                                                {/* Action Buttons */}
+                                                <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                    <button
+                                                        onClick={() => handleEdit(transaction)}
+                                                        className="p-2 text-indigo-500 hover:bg-indigo-50 rounded-lg transition-colors"
+                                                        title="Edit"
+                                                    >
+                                                        <Pencil className="w-4 h-4" />
+                                                    </button>
+                                                    <button
+                                                        onClick={() => deleteTransaction(transaction.id)}
+                                                        className="p-2 text-rose-500 hover:bg-rose-50 rounded-lg transition-colors"
+                                                        title="Hapus"
+                                                    >
+                                                        <Trash2 className="w-4 h-4" />
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))
+                                )}
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </main>
