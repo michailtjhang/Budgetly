@@ -143,19 +143,32 @@ export default function Dashboard() {
     };
 
     // Filter Logic: Filter by Month AND Type
-    const filteredByMonth = transactions.filter(t => t.date.startsWith(selectedMonth));
+    const filteredByMonth = (transactions || []).filter(t =>
+        t && t.date && typeof t.date === "string" && t.date.startsWith(selectedMonth)
+    );
 
     // Calculate Summary based on MONTHLY data
     const income = filteredByMonth
         .filter((t) => t.type === "income")
-        .reduce((sum, t) => sum + t.amount, 0);
+        .reduce((sum, t) => sum + (t.amount || 0), 0);
 
     const expense = filteredByMonth
         .filter((t) => t.type === "expense")
-        .reduce((sum, t) => sum + t.amount, 0);
+        .reduce((sum, t) => sum + (t.amount || 0), 0);
 
     const balance = income - expense;
     const remainingPercentage = income > 0 ? Math.round(((balance) / income) * 100) : 0;
+
+    // Calculate Overall Summary (All Time)
+    const totalIncomeAllTime = (transactions || [])
+        .filter((t) => t && t.type === "income")
+        .reduce((sum, t) => sum + (t.amount || 0), 0);
+
+    const totalExpenseAllTime = (transactions || [])
+        .filter((t) => t && t.type === "expense")
+        .reduce((sum, t) => sum + (t.amount || 0), 0);
+
+    const totalBalanceAllTime = totalIncomeAllTime - totalExpenseAllTime;
 
     // Final list filter for display
     const visibleTransactions = filteredByMonth.filter((t) => {
@@ -212,15 +225,26 @@ export default function Dashboard() {
                 {/* Hero / Balance Section */}
                 <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-indigo-600 via-purple-600 to-violet-600 p-8 text-white shadow-xl shadow-indigo-200">
                     <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-                        <div>
-                            <p className="text-indigo-100 font-medium mb-1">
-                                Saldo Bulan {new Date(selectedMonth).toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })}
-                            </p>
-                            <h2 className="text-4xl md:text-5xl font-bold tracking-tight">
-                                Rp {formatRupiah(balance)}
-                            </h2>
-                            <div className="mt-4 flex items-center gap-2 text-sm bg-white/10 w-fit px-3 py-1 rounded-full backdrop-blur-sm border border-white/20">
-                                <span>Sisa budget: {remainingPercentage}%</span>
+                        <div className="space-y-4">
+                            <div>
+                                <p className="text-indigo-100 font-medium mb-1">
+                                    Saldo Bulan {new Date(selectedMonth).toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })}
+                                </p>
+                                <h2 className="text-4xl md:text-5xl font-bold tracking-tight">
+                                    Rp {formatRupiah(balance)}
+                                </h2>
+                            </div>
+
+                            {/* Overall Balance Indicator */}
+                            <div className="flex flex-wrap gap-2">
+                                <div className="flex items-center gap-2 text-sm bg-white/10 w-fit px-3 py-1.5 rounded-full backdrop-blur-sm border border-white/20">
+                                    <span className="text-indigo-100">Budget Bulan Ini:</span>
+                                    <span className="font-bold">{remainingPercentage}%</span>
+                                </div>
+                                <div className="flex items-center gap-2 text-sm bg-indigo-500/30 w-fit px-3 py-1.5 rounded-full backdrop-blur-sm border border-white/20">
+                                    <span className="text-indigo-100 italic">Total Saldo:</span>
+                                    <span className="font-bold">Rp {formatRupiah(totalBalanceAllTime)}</span>
+                                </div>
                             </div>
                         </div>
 
@@ -323,8 +347,8 @@ export default function Dashboard() {
                                     onClick={saveTransaction}
                                     disabled={loading}
                                     className={`w-full py-3 text-white rounded-xl font-medium shadow-lg transition-all active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed flex justify-center items-center gap-2 ${editingId
-                                            ? "bg-emerald-600 hover:bg-emerald-700 shadow-emerald-200"
-                                            : "bg-indigo-600 hover:bg-indigo-700 shadow-indigo-200"
+                                        ? "bg-emerald-600 hover:bg-emerald-700 shadow-emerald-200"
+                                        : "bg-indigo-600 hover:bg-indigo-700 shadow-indigo-200"
                                         }`}
                                 >
                                     {loading ? "Menyimpan..." : (editingId ? "Update Transaksi" : "Simpan Transaksi")}
@@ -395,9 +419,9 @@ export default function Dashboard() {
                                                     </p>
                                                     <div className="flex items-center gap-2 text-xs text-gray-500">
                                                         <Calendar className="w-3 h-3" />
-                                                        {new Date(transaction.date).toLocaleDateString("id-ID", {
+                                                        {transaction.date ? new Date(transaction.date).toLocaleDateString("id-ID", {
                                                             day: "numeric", month: "long", year: "numeric"
-                                                        })}
+                                                        }) : "Tanpa Tanggal"}
                                                     </div>
                                                 </div>
                                             </div>
