@@ -15,6 +15,7 @@ import {
     Calendar,
     XCircle
 } from "lucide-react";
+import FinancialChart from "@/components/FinancialChart";
 
 interface Transaction {
     id: number;
@@ -270,6 +271,9 @@ export default function Dashboard() {
                     <div className="absolute top-0 right-0 -mr-20 -mt-20 w-64 h-64 rounded-full bg-white/10 blur-3xl"></div>
                     <div className="absolute bottom-0 left-0 -ml-20 -mb-20 w-64 h-64 rounded-full bg-indigo-500/30 blur-3xl"></div>
                 </div>
+
+                {/* Charts Section */}
+                <FinancialChart transactions={filteredByMonth} month={selectedMonth} />
 
                 {/* Main Content Grid */}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
