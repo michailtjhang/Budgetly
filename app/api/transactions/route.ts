@@ -8,6 +8,7 @@ const transactionSchema = z.object({
   amount: z.number().min(1, "Amount must be positive"), // Ensure amount is > 0
   type: z.enum(["income", "expense"]),
   date: z.string().optional(), // Allow flexible date input
+  account: z.string().optional(), // NEW: Account/Bank source
 });
 
 export async function GET() {
@@ -41,6 +42,7 @@ export async function POST(req: Request) {
         type: validatedData.type,
         date: validatedData.date ? new Date(validatedData.date) : new Date(),
         userId: user.id,
+        account: validatedData.account,
       },
     });
 
@@ -84,6 +86,7 @@ export async function PUT(req: Request) {
         amount: validatedData.amount,
         type: validatedData.type,
         date: validatedData.date ? new Date(validatedData.date) : existingTransaction.date,
+        account: validatedData.account,
       },
     });
 

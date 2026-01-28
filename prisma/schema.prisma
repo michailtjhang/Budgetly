@@ -14,6 +14,7 @@ model Transaction {
   type        String
   date        DateTime @default(now())
   userId      String
+  account     String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 }

@@ -23,7 +23,10 @@ interface Transaction {
     description: string;
     amount: number;
     date: string;
+    account?: string;
 }
+
+const ACCOUNT_OPTIONS = ["BRI", "Jago", "GoPay", "Dana Darurat", "Lainnya"];
 
 export default function Dashboard() {
     const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -31,6 +34,8 @@ export default function Dashboard() {
     const [amount, setAmount] = useState<number | "">("");
     const [type, setType] = useState<"income" | "expense">("income");
     const [date, setDate] = useState(new Date().toISOString().split("T")[0]); // Default today
+    const [account, setAccount] = useState("BRI");
+    const [customAccount, setCustomAccount] = useState("");
     const [editingId, setEditingId] = useState<number | null>(null);
 
     // Filter State
@@ -66,6 +71,7 @@ export default function Dashboard() {
             description,
             amount: Number(amount),
             date: new Date(date).toISOString(),
+            account: account === "Lainnya" ? customAccount : account,
         };
 
         try {
@@ -129,6 +135,8 @@ export default function Dashboard() {
         setAmount("");
         setType("income");
         setDate(new Date().toISOString().split("T")[0]);
+        setAccount("BRI");
+        setCustomAccount("");
         setEditingId(null);
     };
 
@@ -137,6 +145,15 @@ export default function Dashboard() {
         setAmount(t.amount);
         setType(t.type);
         setDate(new Date(t.date).toISOString().split("T")[0]);
+
+        if (t.account && !ACCOUNT_OPTIONS.includes(t.account)) {
+            setAccount("Lainnya");
+            setCustomAccount(t.account);
+        } else {
+            setAccount(t.account || "BRI");
+            setCustomAccount("");
+        }
+
         setEditingId(t.id);
 
         // Scroll to top to see form
@@ -325,6 +342,27 @@ export default function Dashboard() {
                                     />
                                 </div>
                                 <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Akun / Sumber Dana</label>
+                                    <select
+                                        value={account}
+                                        onChange={(e) => setAccount(e.target.value)}
+                                        className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-sm bg-white"
+                                    >
+                                        {ACCOUNT_OPTIONS.map(opt => (
+                                            <option key={opt} value={opt}>{opt}</option>
+                                        ))}
+                                    </select>
+                                    {account === "Lainnya" && (
+                                        <input
+                                            type="text"
+                                            placeholder="Masukkan nama bank/e-wallet"
+                                            value={customAccount}
+                                            onChange={(e) => setCustomAccount(e.target.value)}
+                                            className="w-full mt-2 px-4 py-2.5 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-sm"
+                                        />
+                                    )}
+                                </div>
+                                <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-1">Tipe</label>
                                     <div className="grid grid-cols-2 gap-2 p-1 bg-gray-100 rounded-xl">
                                         <button
@@ -421,11 +459,17 @@ export default function Dashboard() {
                                                     <p className="font-semibold text-gray-900 group-hover:text-indigo-600 transition-colors">
                                                         {transaction.description}
                                                     </p>
-                                                    <div className="flex items-center gap-2 text-xs text-gray-500">
+                                                    <div className="flex items-center gap-2 text-xs text-gray-500 mt-1">
                                                         <Calendar className="w-3 h-3" />
                                                         {transaction.date ? new Date(transaction.date).toLocaleDateString("id-ID", {
                                                             day: "numeric", month: "long", year: "numeric"
                                                         }) : "Tanpa Tanggal"}
+
+                                                        {transaction.account && (
+                                                            <span className="ml-2 bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full text-[10px] border border-gray-200 font-medium">
+                                                                {transaction.account}
+                                                            </span>
+                                                        )}
                                                     </div>
                                                 </div>
                                             </div>
