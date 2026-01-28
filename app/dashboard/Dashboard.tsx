@@ -26,7 +26,7 @@ interface Transaction {
     account?: string;
 }
 
-const ACCOUNT_OPTIONS = ["Bank BCA", "Bank BRI", "Bank BNI", "Bank Mandiri", "Bank BJB", "Bank Permata", "SeaBank", "Jago", "GoPay", "OVO", "DANA", "Bibit", "Dana Darurat", "Uang Tunai", "Lainnya"];
+const ACCOUNT_OPTIONS = ["BCA", "BRI", "BNI", "Mandiri", "BJB", "Permata", "SeaBank", "Jago", "GoPay", "OVO", "DANA", "Bibit", "Dana Darurat", "Uang Tunai", "Lainnya"];
 
 export default function Dashboard() {
     const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -221,6 +221,26 @@ export default function Dashboard() {
         return new Intl.NumberFormat('id-ID').format(amount);
     };
 
+    const getAccountColor = (acc: string) => {
+        switch (acc) {
+            case "BCA": return "bg-blue-100 text-blue-800";
+            case "BRI": return "bg-blue-50 text-blue-600";
+            case "BNI": return "bg-teal-50 text-teal-600";
+            case "Mandiri": return "bg-yellow-100 text-yellow-700";
+            case "BJB": return "bg-cyan-100 text-cyan-700";
+            case "Permata": return "bg-lime-100 text-lime-700";
+            case "SeaBank": return "bg-orange-100 text-orange-600";
+            case "Jago": return "bg-fuchsia-100 text-fuchsia-600";
+            case "GoPay": return "bg-green-100 text-green-600";
+            case "OVO": return "bg-violet-100 text-violet-700";
+            case "DANA": return "bg-sky-100 text-sky-600";
+            case "Bibit": return "bg-emerald-100 text-emerald-600";
+            case "Dana Darurat": return "bg-red-100 text-red-600";
+            case "Uang Tunai": return "bg-slate-200 text-slate-700";
+            default: return "bg-gray-100 text-gray-600";
+        }
+    };
+
     return (
         <main className="min-h-screen bg-gray-50 pb-20">
             {/* Navbar */}
@@ -321,14 +341,7 @@ export default function Dashboard() {
                             return (
                                 <div key={idx} className="min-w-[160px] bg-white p-4 rounded-2xl border border-gray-100 shadow-sm snap-start flex-shrink-0">
                                     <div className="flex items-center gap-2 mb-2">
-                                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold
-                                            ${acc === "BRI" ? "bg-blue-100 text-blue-600" :
-                                                acc === "Jago" ? "bg-purple-100 text-purple-600" :
-                                                    acc === "GoPay" ? "bg-green-100 text-green-600" :
-                                                        acc === "Bibit" ? "bg-emerald-100 text-emerald-600" :
-                                                            acc === "Dana Darurat" ? "bg-orange-100 text-orange-600" :
-                                                                "bg-gray-100 text-gray-600"
-                                            }`}>
+                                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${getAccountColor(acc)}`}>
                                             {acc.substring(0, 1)}
                                         </div>
                                         <span className="text-sm font-medium text-gray-600 truncate">{acc}</span>
@@ -531,7 +544,7 @@ export default function Dashboard() {
                                                         }) : "Tanpa Tanggal"}
 
                                                         {transaction.account && (
-                                                            <span className="ml-2 bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full text-[10px] border border-gray-200 font-medium">
+                                                            <span className={`ml-2 px-2 py-0.5 rounded-full text-[10px] border border-transparent font-medium ${getAccountColor(transaction.account)}`}>
                                                                 {transaction.account}
                                                             </span>
                                                         )}
