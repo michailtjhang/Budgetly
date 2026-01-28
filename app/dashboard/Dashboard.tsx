@@ -26,7 +26,7 @@ interface Transaction {
     account?: string;
 }
 
-const ACCOUNT_OPTIONS = ["BRI", "Jago", "GoPay", "Dana Darurat", "Lainnya"];
+const ACCOUNT_OPTIONS = ["BRI", "Jago", "GoPay", "Bibit", "Dana Darurat", "Lainnya"];
 
 export default function Dashboard() {
     const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -40,6 +40,7 @@ export default function Dashboard() {
 
     // Filter State
     const [activeFilter, setActiveFilter] = useState<"all" | "income" | "expense">("all");
+    const [activeAccountFilter, setActiveAccountFilter] = useState<string>("all");
     const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7)); // YYYY-MM
     const [loading, setLoading] = useState(false);
 
@@ -192,7 +193,7 @@ export default function Dashboard() {
     const accountBalances = (transactions || []).reduce((acc, t) => {
         const accountName = t.account || "Lainnya";
         const amount = t.amount || 0;
-        
+
         if (!acc[accountName]) {
             acc[accountName] = 0;
         }
@@ -202,7 +203,7 @@ export default function Dashboard() {
         } else {
             acc[accountName] -= amount;
         }
-        
+
         return acc;
     }, {} as Record<string, number>);
 
@@ -211,8 +212,9 @@ export default function Dashboard() {
 
     // Final list filter for display
     const visibleTransactions = filteredByMonth.filter((t) => {
-        if (activeFilter === "all") return true;
-        return t.type === activeFilter;
+        const matchesType = activeFilter === "all" ? true : t.type === activeFilter;
+        const matchesAccount = activeAccountFilter === "all" ? true : (t.account === activeAccountFilter || (activeAccountFilter === "Lainnya" && !ACCOUNT_OPTIONS.includes(t.account || "")));
+        return matchesType && matchesAccount;
     });
 
     const formatRupiah = (amount: number) => {
@@ -312,19 +314,20 @@ export default function Dashboard() {
 
                 {/* Account Balances Scrollable Section */}
                 <div>
-                     <h3 className="text-lg font-semibold text-gray-800 mb-4 px-1">Saldo per Akun</h3>
-                     <div className="flex gap-4 overflow-x-auto pb-4 snap-x">
+                    <h3 className="text-lg font-semibold text-gray-800 mb-4 px-1">Saldo per Akun</h3>
+                    <div className="flex gap-4 overflow-x-auto pb-4 snap-x">
                         {allAccounts.map((acc, idx) => {
                             const balance = accountBalances[acc] || 0;
                             return (
                                 <div key={idx} className="min-w-[160px] bg-white p-4 rounded-2xl border border-gray-100 shadow-sm snap-start flex-shrink-0">
                                     <div className="flex items-center gap-2 mb-2">
                                         <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold
-                                            ${acc === "BRI" ? "bg-blue-100 text-blue-600" : 
-                                              acc === "Jago" ? "bg-purple-100 text-purple-600" :
-                                              acc === "GoPay" ? "bg-green-100 text-green-600" :
-                                              acc === "Dana Darurat" ? "bg-orange-100 text-orange-600" :
-                                              "bg-gray-100 text-gray-600"
+                                            ${acc === "BRI" ? "bg-blue-100 text-blue-600" :
+                                                acc === "Jago" ? "bg-purple-100 text-purple-600" :
+                                                    acc === "GoPay" ? "bg-green-100 text-green-600" :
+                                                        acc === "Bibit" ? "bg-emerald-100 text-emerald-600" :
+                                                            acc === "Dana Darurat" ? "bg-orange-100 text-orange-600" :
+                                                                "bg-gray-100 text-gray-600"
                                             }`}>
                                             {acc.substring(0, 1)}
                                         </div>
@@ -336,7 +339,7 @@ export default function Dashboard() {
                                 </div>
                             );
                         })}
-                     </div>
+                    </div>
                 </div>
 
                 {/* Charts Section */}
@@ -457,7 +460,19 @@ export default function Dashboard() {
                                     <History className="w-5 h-5 text-indigo-600" />
                                     Riwayat Transaksi
                                 </h3>
-                                <div className="flex gap-2">
+                                <div className="flex flex-wrap gap-2">
+                                    {/* Account Filter Dropdown */}
+                                    <select
+                                        value={activeAccountFilter}
+                                        onChange={(e) => setActiveAccountFilter(e.target.value)}
+                                        className="px-3 py-1.5 rounded-full text-xs font-medium border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 outline-none focus:ring-2 focus:ring-indigo-500/20"
+                                    >
+                                        <option value="all">Semua Akun</option>
+                                        {allAccounts.map(acc => (
+                                            <option key={acc} value={acc}>{acc}</option>
+                                        ))}
+                                    </select>
+
                                     <button
                                         onClick={() => setActiveFilter("all")}
                                         className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${activeFilter === "all" ? "bg-gray-900 text-white border-gray-900" : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
