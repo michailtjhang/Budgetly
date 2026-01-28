@@ -26,7 +26,7 @@ interface Transaction {
     account?: string;
 }
 
-const ACCOUNT_OPTIONS = ["BRI", "Jago", "GoPay", "Bibit", "Dana Darurat", "Uang Tunai", "Lainnya"];
+const ACCOUNT_OPTIONS = ["Bank BCA", "Bank BRI", "Bank BNI", "Bank Mandiri", "Bank BJB", "Bank Permata", "SeaBank", "Jago", "GoPay", "OVO", "DANA", "Bibit", "Dana Darurat", "Uang Tunai", "Lainnya"];
 
 export default function Dashboard() {
     const [transactions, setTransactions] = useState<Transaction[]>([]);
