@@ -188,6 +188,27 @@ export default function Dashboard() {
 
     const totalBalanceAllTime = totalIncomeAllTime - totalExpenseAllTime;
 
+    // Calculate Balance by Account (All Time)
+    const accountBalances = (transactions || []).reduce((acc, t) => {
+        const accountName = t.account || "Lainnya";
+        const amount = t.amount || 0;
+        
+        if (!acc[accountName]) {
+            acc[accountName] = 0;
+        }
+
+        if (t.type === "income") {
+            acc[accountName] += amount;
+        } else {
+            acc[accountName] -= amount;
+        }
+        
+        return acc;
+    }, {} as Record<string, number>);
+
+    // Get unique accounts list including defaults
+    const allAccounts = Array.from(new Set([...ACCOUNT_OPTIONS, ...Object.keys(accountBalances)]));
+
     // Final list filter for display
     const visibleTransactions = filteredByMonth.filter((t) => {
         if (activeFilter === "all") return true;
@@ -287,6 +308,35 @@ export default function Dashboard() {
                     {/* Decorative circles */}
                     <div className="absolute top-0 right-0 -mr-20 -mt-20 w-64 h-64 rounded-full bg-white/10 blur-3xl"></div>
                     <div className="absolute bottom-0 left-0 -ml-20 -mb-20 w-64 h-64 rounded-full bg-indigo-500/30 blur-3xl"></div>
+                </div>
+
+                {/* Account Balances Scrollable Section */}
+                <div>
+                     <h3 className="text-lg font-semibold text-gray-800 mb-4 px-1">Saldo per Akun</h3>
+                     <div className="flex gap-4 overflow-x-auto pb-4 snap-x">
+                        {allAccounts.map((acc, idx) => {
+                            const balance = accountBalances[acc] || 0;
+                            return (
+                                <div key={idx} className="min-w-[160px] bg-white p-4 rounded-2xl border border-gray-100 shadow-sm snap-start flex-shrink-0">
+                                    <div className="flex items-center gap-2 mb-2">
+                                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold
+                                            ${acc === "BRI" ? "bg-blue-100 text-blue-600" : 
+                                              acc === "Jago" ? "bg-purple-100 text-purple-600" :
+                                              acc === "GoPay" ? "bg-green-100 text-green-600" :
+                                              acc === "Dana Darurat" ? "bg-orange-100 text-orange-600" :
+                                              "bg-gray-100 text-gray-600"
+                                            }`}>
+                                            {acc.substring(0, 1)}
+                                        </div>
+                                        <span className="text-sm font-medium text-gray-600 truncate">{acc}</span>
+                                    </div>
+                                    <p className={`text-lg font-bold ${balance >= 0 ? 'text-gray-900' : 'text-rose-600'}`}>
+                                        Rp {formatRupiah(balance)}
+                                    </p>
+                                </div>
+                            );
+                        })}
+                     </div>
                 </div>
 
                 {/* Charts Section */}
