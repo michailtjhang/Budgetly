@@ -546,18 +546,18 @@ export default function Dashboard() {
                     {/* Right Column: List & History */}
                     <div className="lg:col-span-2 space-y-6">
                         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 min-h-[500px]">
-                            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
-                                <h3 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
+                            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-8">
+                                <h3 className="text-lg font-semibold text-gray-800 flex items-center gap-2 shrink-0">
                                     <History className="w-5 h-5 text-indigo-600" />
                                     Riwayat Transaksi
                                 </h3>
-                                <div className="flex flex-wrap items-center gap-2 w-full md:w-auto justify-start md:justify-end">
+                                <div className="flex items-center gap-2 w-full lg:w-auto overflow-x-auto lg:overflow-visible pb-2 lg:pb-0 justify-start lg:justify-end no-scrollbar">
                                     {/* Account Filter Dropdown (Searchable) */}
-                                    <div className="relative">
+                                    <div className="relative shrink-0">
                                         <button
                                             type="button"
                                             onClick={() => setShowHistoryAccountDropdown(!showHistoryAccountDropdown)}
-                                            className="px-3 py-2 h-[34px] rounded-full text-xs font-medium border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 outline-none focus:ring-2 focus:ring-indigo-500/20 flex items-center gap-2"
+                                            className="px-3 py-2 h-[34px] rounded-full text-xs font-medium border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 outline-none focus:ring-2 focus:ring-indigo-500/20 flex items-center gap-2 whitespace-nowrap"
                                         >
                                             <Wallet className="w-3 h-3" />
                                             {activeAccountFilter === "all" ? "Semua Akun" : activeAccountFilter}
@@ -565,7 +565,7 @@ export default function Dashboard() {
                                         </button>
 
                                         {showHistoryAccountDropdown && (
-                                            <div className="absolute z-20 left-0 sm:right-0 mt-2 w-60 bg-white rounded-2xl border border-gray-100 shadow-xl overflow-hidden animate-in fade-in zoom-in duration-200">
+                                            <div className="absolute z-20 left-0 lg:right-0 mt-2 w-60 bg-white rounded-2xl border border-gray-100 shadow-xl overflow-hidden animate-in fade-in zoom-in duration-200">
                                                 <div className="p-2 border-b border-gray-50 bg-gray-50/50">
                                                     <div className="relative">
                                                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-400" />
@@ -634,21 +634,21 @@ export default function Dashboard() {
 
                                     <button
                                         onClick={() => setActiveFilter("all")}
-                                        className={`px-3 py-2 rounded-full text-xs font-medium border transition-colors h-[34px] flex items-center ${activeFilter === "all" ? "bg-gray-900 text-white border-gray-900" : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
+                                        className={`px-3 py-2 rounded-full text-xs font-medium border transition-colors h-[34px] flex items-center shrink-0 whitespace-nowrap ${activeFilter === "all" ? "bg-gray-900 text-white border-gray-900" : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
                                             }`}
                                     >
                                         Semua
                                     </button>
                                     <button
                                         onClick={() => setActiveFilter("income")}
-                                        className={`px-3 py-2 rounded-full text-xs font-medium border transition-colors h-[34px] flex items-center ${activeFilter === "income" ? "bg-emerald-100 text-emerald-700 border-emerald-200" : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
+                                        className={`px-3 py-2 rounded-full text-xs font-medium border transition-colors h-[34px] flex items-center shrink-0 whitespace-nowrap ${activeFilter === "income" ? "bg-emerald-100 text-emerald-700 border-emerald-200" : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
                                             }`}
                                     >
                                         Pemasukan
                                     </button>
                                     <button
                                         onClick={() => setActiveFilter("expense")}
-                                        className={`px-3 py-2 rounded-full text-xs font-medium border transition-colors h-[34px] flex items-center ${activeFilter === "expense" ? "bg-rose-100 text-rose-700 border-rose-200" : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
+                                        className={`px-3 py-2 rounded-full text-xs font-medium border transition-colors h-[34px] flex items-center shrink-0 whitespace-nowrap ${activeFilter === "expense" ? "bg-rose-100 text-rose-700 border-rose-200" : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
                                             }`}
                                     >
                                         Pengeluaran
