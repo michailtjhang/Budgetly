@@ -26,7 +26,7 @@ interface Transaction {
     account?: string;
 }
 
-const ACCOUNT_OPTIONS = ["BCA", "BRI", "BNI", "Mandiri", "BJB", "Permata", "SeaBank", "Jago", "GoPay", "OVO", "DANA", "Bibit", "Superbank", "Bank Saqu", "Krom Bank", "Dana Darurat", "Uang Tunai", "Lainnya"];
+const ACCOUNT_OPTIONS = ["BCA", "blu by BCA", "BRI", "BNI", "Mandiri", "BJB", "Permata", "SeaBank", "Jago", "GoPay", "ShopeePay", "OVO", "DANA", "Bibit", "Stockbit", "Ajaib", "Superbank", "Bank Saqu", "Krom Bank", "Dana Darurat", "Uang Tunai", "Lainnya"];
 
 export default function Dashboard() {
     const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -224,6 +224,7 @@ export default function Dashboard() {
     const getAccountColor = (acc: string) => {
         switch (acc) {
             case "BCA": return "bg-blue-100 text-blue-800";
+            case "blu by BCA": return "bg-cyan-100 text-cyan-800";
             case "BRI": return "bg-blue-50 text-blue-600";
             case "BNI": return "bg-teal-50 text-teal-600";
             case "Mandiri": return "bg-yellow-100 text-yellow-700";
@@ -232,9 +233,12 @@ export default function Dashboard() {
             case "SeaBank": return "bg-orange-100 text-orange-600";
             case "Jago": return "bg-fuchsia-100 text-fuchsia-600";
             case "GoPay": return "bg-green-100 text-green-600";
+            case "ShopeePay": return "bg-orange-200 text-orange-800";
             case "OVO": return "bg-violet-100 text-violet-700";
             case "DANA": return "bg-sky-100 text-sky-600";
             case "Bibit": return "bg-emerald-100 text-emerald-600";
+            case "Stockbit": return "bg-green-200 text-green-800";
+            case "Ajaib": return "bg-purple-200 text-purple-800";
             case "Superbank": return "bg-yellow-400 text-yellow-950";
             case "Bank Saqu": return "bg-orange-200 text-orange-800";
             case "Krom Bank": return "bg-violet-200 text-violet-800";
