@@ -546,18 +546,18 @@ export default function Dashboard() {
                     {/* Right Column: List & History */}
                     <div className="lg:col-span-2 space-y-6">
                         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 min-h-[500px]">
-                            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+                            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
                                 <h3 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
                                     <History className="w-5 h-5 text-indigo-600" />
                                     Riwayat Transaksi
                                 </h3>
-                                <div className="flex flex-wrap gap-2">
+                                <div className="flex flex-wrap items-center gap-2 w-full md:w-auto justify-start md:justify-end">
                                     {/* Account Filter Dropdown (Searchable) */}
                                     <div className="relative">
                                         <button
                                             type="button"
                                             onClick={() => setShowHistoryAccountDropdown(!showHistoryAccountDropdown)}
-                                            className="px-3 py-1.5 rounded-full text-xs font-medium border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 outline-none focus:ring-2 focus:ring-indigo-500/20 flex items-center gap-2"
+                                            className="px-3 py-2 h-[34px] rounded-full text-xs font-medium border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 outline-none focus:ring-2 focus:ring-indigo-500/20 flex items-center gap-2"
                                         >
                                             <Wallet className="w-3 h-3" />
                                             {activeAccountFilter === "all" ? "Semua Akun" : activeAccountFilter}
@@ -634,21 +634,21 @@ export default function Dashboard() {
 
                                     <button
                                         onClick={() => setActiveFilter("all")}
-                                        className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${activeFilter === "all" ? "bg-gray-900 text-white border-gray-900" : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
+                                        className={`px-3 py-2 rounded-full text-xs font-medium border transition-colors h-[34px] flex items-center ${activeFilter === "all" ? "bg-gray-900 text-white border-gray-900" : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
                                             }`}
                                     >
                                         Semua
                                     </button>
                                     <button
                                         onClick={() => setActiveFilter("income")}
-                                        className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${activeFilter === "income" ? "bg-emerald-100 text-emerald-700 border-emerald-200" : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
+                                        className={`px-3 py-2 rounded-full text-xs font-medium border transition-colors h-[34px] flex items-center ${activeFilter === "income" ? "bg-emerald-100 text-emerald-700 border-emerald-200" : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
                                             }`}
                                     >
                                         Pemasukan
                                     </button>
                                     <button
                                         onClick={() => setActiveFilter("expense")}
-                                        className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${activeFilter === "expense" ? "bg-rose-100 text-rose-700 border-rose-200" : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
+                                        className={`px-3 py-2 rounded-full text-xs font-medium border transition-colors h-[34px] flex items-center ${activeFilter === "expense" ? "bg-rose-100 text-rose-700 border-rose-200" : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
                                             }`}
                                     >
                                         Pengeluaran
