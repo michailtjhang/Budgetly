@@ -13,7 +13,10 @@ import {
     Pencil,
     Trash2,
     Calendar,
-    XCircle
+    XCircle,
+    Search,
+    ChevronDown,
+    Check
 } from "lucide-react";
 import FinancialChart from "@/components/FinancialChart";
 
@@ -37,10 +40,14 @@ export default function Dashboard() {
     const [account, setAccount] = useState("BRI");
     const [customAccount, setCustomAccount] = useState("");
     const [editingId, setEditingId] = useState<number | null>(null);
+    const [accountSearch, setAccountSearch] = useState("");
+    const [showAccountDropdown, setShowAccountDropdown] = useState(false);
 
     // Filter State
     const [activeFilter, setActiveFilter] = useState<"all" | "income" | "expense">("all");
     const [activeAccountFilter, setActiveAccountFilter] = useState<string>("all");
+    const [historyAccountSearch, setHistoryAccountSearch] = useState("");
+    const [showHistoryAccountDropdown, setShowHistoryAccountDropdown] = useState(false);
     const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7)); // YYYY-MM
     const [loading, setLoading] = useState(false);
 
@@ -416,15 +423,79 @@ export default function Dashboard() {
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-1">Akun / Sumber Dana</label>
-                                    <select
-                                        value={account}
-                                        onChange={(e) => setAccount(e.target.value)}
-                                        className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-sm bg-white"
-                                    >
-                                        {ACCOUNT_OPTIONS.map(opt => (
-                                            <option key={opt} value={opt}>{opt}</option>
-                                        ))}
-                                    </select>
+                                    <div className="relative">
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowAccountDropdown(!showAccountDropdown)}
+                                            className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-sm bg-white flex justify-between items-center"
+                                        >
+                                            <span className={account ? "text-gray-900" : "text-gray-400"}>
+                                                {account || "Pilih Akun"}
+                                            </span>
+                                            <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showAccountDropdown ? "rotate-180" : ""}`} />
+                                        </button>
+
+                                        {showAccountDropdown && (
+                                            <div className="absolute z-20 w-full mt-2 bg-white rounded-2xl border border-gray-100 shadow-xl overflow-hidden animate-in fade-in zoom-in duration-200">
+                                                <div className="p-2 border-b border-gray-50 bg-gray-50/50">
+                                                    <div className="relative">
+                                                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                                                        <input
+                                                            type="text"
+                                                            placeholder="Cari akun..."
+                                                            value={accountSearch}
+                                                            onChange={(e) => setAccountSearch(e.target.value)}
+                                                            className="w-full pl-9 pr-4 py-2 rounded-lg bg-white border border-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 text-sm"
+                                                            autoFocus
+                                                        />
+                                                    </div>
+                                                </div>
+                                                <div className="max-h-60 overflow-y-auto p-1 py-2">
+                                                    {ACCOUNT_OPTIONS.filter(opt =>
+                                                        opt.toLowerCase().includes(accountSearch.toLowerCase())
+                                                    ).map((opt) => (
+                                                        <button
+                                                            key={opt}
+                                                            type="button"
+                                                            onClick={() => {
+                                                                setAccount(opt);
+                                                                setShowAccountDropdown(false);
+                                                                setAccountSearch("");
+                                                            }}
+                                                            className="w-full px-4 py-2 text-sm text-left hover:bg-indigo-50 rounded-lg flex justify-between items-center transition-colors group"
+                                                        >
+                                                            <div className="flex items-center gap-3">
+                                                                <div className={`w-2 h-2 rounded-full ${getAccountColor(opt).split(' ')[0]}`} />
+                                                                <span className={account === opt ? "font-semibold text-indigo-600" : "text-gray-700"}>
+                                                                    {opt}
+                                                                </span>
+                                                            </div>
+                                                            {account === opt && <Check className="w-4 h-4 text-indigo-600" />}
+                                                        </button>
+                                                    ))}
+                                                    {ACCOUNT_OPTIONS.filter(opt =>
+                                                        opt.toLowerCase().includes(accountSearch.toLowerCase())
+                                                    ).length === 0 && (
+                                                            <div className="px-4 py-8 text-center text-gray-400 text-sm italic">
+                                                                Akun tidak ditemukan
+                                                            </div>
+                                                        )}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Handle Click Outside (Simple version via overlay) */}
+                                    {showAccountDropdown && (
+                                        <div
+                                            className="fixed inset-0 z-10"
+                                            onClick={() => {
+                                                setShowAccountDropdown(false);
+                                                setAccountSearch("");
+                                            }}
+                                        />
+                                    )}
+
                                     {account === "Lainnya" && (
                                         <input
                                             type="text"
@@ -481,17 +552,85 @@ export default function Dashboard() {
                                     Riwayat Transaksi
                                 </h3>
                                 <div className="flex flex-wrap gap-2">
-                                    {/* Account Filter Dropdown */}
-                                    <select
-                                        value={activeAccountFilter}
-                                        onChange={(e) => setActiveAccountFilter(e.target.value)}
-                                        className="px-3 py-1.5 rounded-full text-xs font-medium border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 outline-none focus:ring-2 focus:ring-indigo-500/20"
-                                    >
-                                        <option value="all">Semua Akun</option>
-                                        {allAccounts.map(acc => (
-                                            <option key={acc} value={acc}>{acc}</option>
-                                        ))}
-                                    </select>
+                                    {/* Account Filter Dropdown (Searchable) */}
+                                    <div className="relative">
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowHistoryAccountDropdown(!showHistoryAccountDropdown)}
+                                            className="px-3 py-1.5 rounded-full text-xs font-medium border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 outline-none focus:ring-2 focus:ring-indigo-500/20 flex items-center gap-2"
+                                        >
+                                            <Wallet className="w-3 h-3" />
+                                            {activeAccountFilter === "all" ? "Semua Akun" : activeAccountFilter}
+                                            <ChevronDown className={`w-3 h-3 transition-transform ${showHistoryAccountDropdown ? "rotate-180" : ""}`} />
+                                        </button>
+
+                                        {showHistoryAccountDropdown && (
+                                            <div className="absolute z-20 left-0 sm:right-0 mt-2 w-60 bg-white rounded-2xl border border-gray-100 shadow-xl overflow-hidden animate-in fade-in zoom-in duration-200">
+                                                <div className="p-2 border-b border-gray-50 bg-gray-50/50">
+                                                    <div className="relative">
+                                                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-400" />
+                                                        <input
+                                                            type="text"
+                                                            placeholder="Cari akun..."
+                                                            value={historyAccountSearch}
+                                                            onChange={(e) => setHistoryAccountSearch(e.target.value)}
+                                                            className="w-full pl-8 pr-3 py-1.5 rounded-lg bg-white border border-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 text-xs"
+                                                            autoFocus
+                                                        />
+                                                    </div>
+                                                </div>
+                                                <div className="max-h-60 overflow-y-auto p-1 py-1">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setActiveAccountFilter("all");
+                                                            setShowHistoryAccountDropdown(false);
+                                                            setHistoryAccountSearch("");
+                                                        }}
+                                                        className="w-full px-3 py-2 text-xs text-left hover:bg-indigo-50 rounded-lg flex justify-between items-center transition-colors group"
+                                                    >
+                                                        <span className={activeAccountFilter === "all" ? "font-semibold text-indigo-600" : "text-gray-700"}>
+                                                            Semua Akun
+                                                        </span>
+                                                        {activeAccountFilter === "all" && <Check className="w-3 h-3 text-indigo-600" />}
+                                                    </button>
+                                                    {allAccounts.filter(acc =>
+                                                        acc.toLowerCase().includes(historyAccountSearch.toLowerCase())
+                                                    ).map((acc) => (
+                                                        <button
+                                                            key={acc}
+                                                            type="button"
+                                                            onClick={() => {
+                                                                setActiveAccountFilter(acc);
+                                                                setShowHistoryAccountDropdown(false);
+                                                                setHistoryAccountSearch("");
+                                                            }}
+                                                            className="w-full px-3 py-2 text-xs text-left hover:bg-indigo-50 rounded-lg flex justify-between items-center transition-colors group"
+                                                        >
+                                                            <div className="flex items-center gap-2">
+                                                                <div className={`w-1.5 h-1.5 rounded-full ${getAccountColor(acc).split(' ')[0]}`} />
+                                                                <span className={activeAccountFilter === acc ? "font-semibold text-indigo-600" : "text-gray-700"}>
+                                                                    {acc}
+                                                                </span>
+                                                            </div>
+                                                            {activeAccountFilter === acc && <Check className="w-3 h-3 text-indigo-600" />}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Overlay for Click Outside */}
+                                    {showHistoryAccountDropdown && (
+                                        <div
+                                            className="fixed inset-0 z-10"
+                                            onClick={() => {
+                                                setShowHistoryAccountDropdown(false);
+                                                setHistoryAccountSearch("");
+                                            }}
+                                        />
+                                    )}
 
                                     <button
                                         onClick={() => setActiveFilter("all")}
