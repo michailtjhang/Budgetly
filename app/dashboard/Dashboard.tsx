@@ -26,7 +26,7 @@ interface Transaction {
     account?: string;
 }
 
-const ACCOUNT_OPTIONS = ["BCA", "BRI", "BNI", "Mandiri", "BJB", "Permata", "SeaBank", "Jago", "GoPay", "OVO", "DANA", "Bibit", "Dana Darurat", "Uang Tunai", "Lainnya"];
+const ACCOUNT_OPTIONS = ["BCA", "BRI", "BNI", "Mandiri", "BJB", "Permata", "SeaBank", "Jago", "GoPay", "OVO", "DANA", "Bibit", "Superbank", "Bank Saqu", "Krom Bank", "Dana Darurat", "Uang Tunai", "Lainnya"];
 
 export default function Dashboard() {
     const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -235,6 +235,9 @@ export default function Dashboard() {
             case "OVO": return "bg-violet-100 text-violet-700";
             case "DANA": return "bg-sky-100 text-sky-600";
             case "Bibit": return "bg-emerald-100 text-emerald-600";
+            case "Superbank": return "bg-yellow-400 text-yellow-950";
+            case "Bank Saqu": return "bg-orange-200 text-orange-800";
+            case "Krom Bank": return "bg-violet-200 text-violet-800";
             case "Dana Darurat": return "bg-red-100 text-red-600";
             case "Uang Tunai": return "bg-slate-200 text-slate-700";
             default: return "bg-gray-100 text-gray-600";
