@@ -93,16 +93,35 @@ export default function FinancialChart({ transactions, month }: FinancialChartPr
     ];
 
     // 3. Prepare Data for Category Pie Chart (Expense Breakdown)
-    const expenseTransactions = transactions.filter(t => t.type === "expense");
-    const categoryMap = expenseTransactions.reduce((acc, t) => {
+    // Specially handle "Top Up & Tabungan": Only count if Net (Expense - Income) is positive
+    const initialCategoryMap = transactions.reduce((acc, t) => {
         const cat = t.category || "Lainnya";
-        acc[cat] = (acc[cat] || 0) + (t.amount || 0);
+        if (!acc[cat]) acc[cat] = { income: 0, expense: 0 };
+        if (t.type === "income") acc[cat].income += (t.amount || 0);
+        else acc[cat].expense += (t.amount || 0);
         return acc;
-    }, {} as Record<string, number>);
+    }, {} as Record<string, { income: number, expense: number }>);
 
-    const categoryData = Object.entries(categoryMap)
-        .map(([name, value]) => ({ name, value }))
+    const categoryDataRaw = Object.entries(initialCategoryMap)
+        .map(([name, data]) => {
+            let value = 0;
+            if (name === "Top Up & Tabungan") {
+                // For Top Up, we only care about the NET outflow (money gone)
+                const netOutflow = data.expense - data.income;
+                value = netOutflow > 0 ? netOutflow : 0;
+            } else {
+                // For other categories, we treat expenses as spending
+                value = data.expense;
+            }
+            return { name, value };
+        })
+        .filter(item => item.value > 0) // Only show categories with actual spending
         .sort((a, b) => b.value - a.value);
+
+    const categoryData = categoryDataRaw;
+
+    // Recalculate total actual "spending" for the category chart to match its data
+    const totalActualSpending = categoryData.reduce((sum, item) => sum + item.value, 0);
 
     const CATEGORY_COLORS = [
         "#6366f1", "#8b5cf6", "#ec4899", "#f43f5e", "#f97316",
@@ -225,7 +244,7 @@ export default function FinancialChart({ transactions, month }: FinancialChartPr
                         <p className="text-gray-500 text-sm mt-1">Distribusi pengeluaran Anda bulan ini</p>
                     </div>
                     <div className="bg-rose-50 px-4 py-2 rounded-xl border border-rose-100">
-                        <span className="text-rose-600 font-bold text-lg">Total: {formatRupiah(totalExpense)}</span>
+                        <span className="text-rose-600 font-bold text-lg">Total: {formatRupiah(totalActualSpending)}</span>
                     </div>
                 </div>
 
@@ -265,7 +284,7 @@ export default function FinancialChart({ transactions, month }: FinancialChartPr
                         )}
                         {/* Center Text for Donut */}
                         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-center">
-                            <p className="text-gray-400 text-xs font-medium uppercase tracking-wider">Terbanyak</p>
+                            <p className="text-gray-400 text-xs font-medium uppercase tracking-wider">Boncos!</p>
                             <p className="text-xl font-bold text-indigo-600 truncate max-w-[120px]">
                                 {categoryData[0]?.name || "-"}
                             </p>
@@ -280,13 +299,18 @@ export default function FinancialChart({ transactions, month }: FinancialChartPr
                             </div>
                         ) : (
                             categoryData.slice(0, 6).map((item, index) => {
-                                const percentage = Math.round((item.value / totalExpense) * 100);
+                                const percentage = totalActualSpending > 0 ? Math.round((item.value / totalActualSpending) * 100) : 0;
                                 return (
                                     <div key={item.name} className="space-y-2">
                                         <div className="flex justify-between items-center text-sm">
                                             <div className="flex items-center gap-3">
                                                 <span className="text-xl filter drop-shadow-sm">{CATEGORY_ICONS[item.name] || "🏷️"}</span>
                                                 <span className="font-semibold text-gray-700">{item.name}</span>
+                                                {index === 0 && (
+                                                    <span className="px-2 py-0.5 bg-rose-100 text-rose-600 text-[10px] font-bold rounded-full uppercase tracking-tighter">
+                                                        🔥 Boncos!
+                                                    </span>
+                                                )}
                                             </div>
                                             <div className="text-right">
                                                 <span className="font-bold text-gray-900">{formatRupiah(item.value)}</span>

@@ -670,7 +670,7 @@ export default function Dashboard() {
                                     <History className="w-5 h-5 text-indigo-600" />
                                     Riwayat Transaksi
                                 </h3>
-                                <div className="flex items-center gap-2 w-full lg:w-auto overflow-x-auto lg:overflow-visible pb-2 lg:pb-0 justify-start lg:justify-end no-scrollbar">
+                                <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto justify-start lg:justify-end">
                                     {/* Account Filter Dropdown (Searchable) */}
                                     <div className="relative shrink-0">
                                         <button
