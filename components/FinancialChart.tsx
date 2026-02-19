@@ -105,8 +105,8 @@ export default function FinancialChart({ transactions, month }: FinancialChartPr
     const categoryDataRaw = Object.entries(initialCategoryMap)
         .map(([name, data]) => {
             let value = 0;
-            if (name === "Top Up & Tabungan") {
-                // For Top Up, we only care about the NET outflow (money gone)
+            if (name === "Top Up & Tabungan" || name === "Investasi & Saham") {
+                // For Transfers and Investments, we only care about the NET outflow (money gone)
                 const netOutflow = data.expense - data.income;
                 value = netOutflow > 0 ? netOutflow : 0;
             } else {

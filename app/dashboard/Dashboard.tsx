@@ -213,13 +213,31 @@ export default function Dashboard() {
     );
 
     // Calculate Summary based on MONTHLY data
-    const income = filteredByMonth
-        .filter((t) => t.type === "income")
+    // Categories that need "Net Outflow" logic: Top Up & Investasi
+    const NET_ONLY_CATEGORIES = ["Top Up & Tabungan", "Investasi & Saham"];
+
+    // 1. Calculate totals for normal categories
+    const normalIncome = filteredByMonth
+        .filter((t) => t.type === "income" && !NET_ONLY_CATEGORIES.includes(t.category || ""))
         .reduce((sum, t) => sum + (t.amount || 0), 0);
 
-    const expense = filteredByMonth
-        .filter((t) => t.type === "expense")
+    const normalExpense = filteredByMonth
+        .filter((t) => t.type === "expense" && !NET_ONLY_CATEGORIES.includes(t.category || ""))
         .reduce((sum, t) => sum + (t.amount || 0), 0);
+
+    // 2. Calculate net for specialized categories
+    const netSpecializedExpense = NET_ONLY_CATEGORIES.reduce((totalNet, catName) => {
+        const catTransactions = filteredByMonth.filter(t => t.category === catName);
+        const catIncome = catTransactions.filter(t => t.type === "income").reduce((s, t) => s + (t.amount || 0), 0);
+        const catExpense = catTransactions.filter(t => t.type === "expense").reduce((s, t) => s + (t.amount || 0), 0);
+
+        const netOutflow = catExpense - catIncome;
+        return totalNet + (netOutflow > 0 ? netOutflow : 0);
+    }, 0);
+
+    // Final global totals for the dashboard boxes
+    const income = normalIncome; // Incomes in TopUp/Invest are treated as offsets, not "earned income"
+    const expense = normalExpense + netSpecializedExpense;
 
     const balance = income - expense;
     const remainingPercentage = income > 0 ? Math.round(((balance) / income) * 100) : 0;
