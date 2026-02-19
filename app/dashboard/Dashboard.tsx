@@ -32,7 +32,7 @@ interface Transaction {
     category?: string;
 }
 
-const ACCOUNT_OPTIONS = ["BCA", "blu by BCA", "BRI", "BNI", "Mandiri", "BJB", "Permata", "SeaBank", "Jago", "GoPay", "ShopeePay", "OVO", "DANA", "Bibit", "Stockbit", "Ajaib", "Superbank", "Bank Saqu", "Krom Bank", "Dana Darurat", "Uang Tunai", "Lainnya"];
+const ACCOUNT_OPTIONS = ["BCA", "blu by BCA", "BRI", "BNI", "Mandiri", "BJB", "Permata", "SeaBank", "Jago", "Flip", "GoPay", "ShopeePay", "OVO", "DANA", "Bibit", "Stockbit", "Ajaib", "Superbank", "Bank Saqu", "Krom Bank", "Dana Darurat", "Uang Tunai", "Lainnya"];
 
 const CATEGORY_OPTIONS = [
     { name: "Makanan & Minuman", icon: "🍔" },
@@ -297,6 +297,7 @@ export default function Dashboard() {
             case "Permata": return "bg-lime-100 text-lime-700";
             case "SeaBank": return "bg-orange-100 text-orange-600";
             case "Jago": return "bg-fuchsia-100 text-fuchsia-600";
+            case "Flip": return "bg-orange-500 text-white";
             case "GoPay": return "bg-green-100 text-green-600";
             case "ShopeePay": return "bg-orange-200 text-orange-800";
             case "OVO": return "bg-violet-100 text-violet-700";
