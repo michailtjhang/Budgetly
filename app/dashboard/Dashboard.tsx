@@ -16,7 +16,9 @@ import {
     XCircle,
     Search,
     ChevronDown,
-    Check
+    Check,
+    Plus,
+    Tag
 } from "lucide-react";
 import FinancialChart from "@/components/FinancialChart";
 
@@ -27,9 +29,24 @@ interface Transaction {
     amount: number;
     date: string;
     account?: string;
+    category?: string;
 }
 
 const ACCOUNT_OPTIONS = ["BCA", "blu by BCA", "BRI", "BNI", "Mandiri", "BJB", "Permata", "SeaBank", "Jago", "GoPay", "ShopeePay", "OVO", "DANA", "Bibit", "Stockbit", "Ajaib", "Superbank", "Bank Saqu", "Krom Bank", "Dana Darurat", "Uang Tunai", "Lainnya"];
+
+const CATEGORY_OPTIONS = [
+    { name: "Makanan & Minuman", icon: "🍔" },
+    { name: "Belanja & Pakaian", icon: "🛍️" },
+    { name: "Kesehatan & Skincare", icon: "✨" },
+    { name: "Ibadah & Sosial", icon: "🙏" },
+    { name: "Hobby & Gaming", icon: "🎮" },
+    { name: "Elektronik", icon: "🎧" },
+    { name: "Transportasi", icon: "🚗" },
+    { name: "Pendidikan", icon: "📚" },
+    { name: "Tagihan", icon: "📝" },
+    { name: "Penghasilan", icon: "💰" },
+    { name: "Lainnya", icon: "🏷️" }
+];
 
 export default function Dashboard() {
     const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -39,15 +56,22 @@ export default function Dashboard() {
     const [date, setDate] = useState(new Date().toISOString().split("T")[0]); // Default today
     const [account, setAccount] = useState("BRI");
     const [customAccount, setCustomAccount] = useState("");
+    const [category, setCategory] = useState("Lainnya");
+    const [customCategory, setCustomCategory] = useState("");
     const [editingId, setEditingId] = useState<number | null>(null);
     const [accountSearch, setAccountSearch] = useState("");
     const [showAccountDropdown, setShowAccountDropdown] = useState(false);
+    const [categorySearch, setCategorySearch] = useState("");
+    const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
 
     // Filter State
     const [activeFilter, setActiveFilter] = useState<"all" | "income" | "expense">("all");
     const [activeAccountFilter, setActiveAccountFilter] = useState<string>("all");
+    const [activeCategoryFilter, setActiveCategoryFilter] = useState<string>("all");
     const [historyAccountSearch, setHistoryAccountSearch] = useState("");
     const [showHistoryAccountDropdown, setShowHistoryAccountDropdown] = useState(false);
+    const [historyCategorySearch, setHistoryCategorySearch] = useState("");
+    const [showHistoryCategoryDropdown, setShowHistoryCategoryDropdown] = useState(false);
     const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7)); // YYYY-MM
     const [loading, setLoading] = useState(false);
 
@@ -80,6 +104,7 @@ export default function Dashboard() {
             amount: Number(amount),
             date: new Date(date).toISOString(),
             account: account === "Lainnya" ? customAccount : account,
+            category: category === "Lainnya" ? customCategory : category,
         };
 
         try {
@@ -145,6 +170,8 @@ export default function Dashboard() {
         setDate(new Date().toISOString().split("T")[0]);
         setAccount("BRI");
         setCustomAccount("");
+        setCategory("Lainnya");
+        setCustomCategory("");
         setEditingId(null);
     };
 
@@ -160,6 +187,14 @@ export default function Dashboard() {
         } else {
             setAccount(t.account || "BRI");
             setCustomAccount("");
+        }
+
+        if (t.category && !CATEGORY_OPTIONS.some(opt => opt.name === t.category)) {
+            setCategory("Lainnya");
+            setCustomCategory(t.category);
+        } else {
+            setCategory(t.category || "Lainnya");
+            setCustomCategory("");
         }
 
         setEditingId(t.id);
@@ -221,7 +256,8 @@ export default function Dashboard() {
     const visibleTransactions = filteredByMonth.filter((t) => {
         const matchesType = activeFilter === "all" ? true : t.type === activeFilter;
         const matchesAccount = activeAccountFilter === "all" ? true : (t.account === activeAccountFilter || (activeAccountFilter === "Lainnya" && !ACCOUNT_OPTIONS.includes(t.account || "")));
-        return matchesType && matchesAccount;
+        const matchesCategory = activeCategoryFilter === "all" ? true : (t.category === activeCategoryFilter || (activeCategoryFilter === "Lainnya" && !CATEGORY_OPTIONS.some(opt => opt.name === t.category)));
+        return matchesType && matchesAccount && matchesCategory;
     });
 
     const formatRupiah = (amount: number) => {
@@ -506,6 +542,85 @@ export default function Dashboard() {
                                         />
                                     )}
                                 </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Kategori</label>
+                                    <div className="relative">
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowCategoryDropdown(!showCategoryDropdown)}
+                                            className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-sm bg-white flex justify-between items-center"
+                                        >
+                                            <span className={category ? "text-gray-900" : "text-gray-400"}>
+                                                {CATEGORY_OPTIONS.find(c => c.name === category)?.icon || "🏷️"} {category || "Pilih Kategori"}
+                                            </span>
+                                            <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showCategoryDropdown ? "rotate-180" : ""}`} />
+                                        </button>
+
+                                        {showCategoryDropdown && (
+                                            <div className="absolute z-20 w-full mt-2 bg-white rounded-2xl border border-gray-100 shadow-xl overflow-hidden animate-in fade-in zoom-in duration-200">
+                                                <div className="p-2 border-b border-gray-50 bg-gray-50/50">
+                                                    <div className="relative">
+                                                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                                                        <input
+                                                            type="text"
+                                                            placeholder="Cari kategori..."
+                                                            value={categorySearch}
+                                                            onChange={(e) => setCategorySearch(e.target.value)}
+                                                            className="w-full pl-9 pr-4 py-2 rounded-lg bg-white border border-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 text-sm"
+                                                            autoFocus
+                                                        />
+                                                    </div>
+                                                </div>
+                                                <div className="max-h-60 overflow-y-auto p-1 py-2">
+                                                    {CATEGORY_OPTIONS.filter(opt =>
+                                                        opt.name.toLowerCase().includes(categorySearch.toLowerCase())
+                                                    ).map((opt) => (
+                                                        <button
+                                                            key={opt.name}
+                                                            type="button"
+                                                            onClick={() => {
+                                                                setCategory(opt.name);
+                                                                setShowCategoryDropdown(false);
+                                                                setCategorySearch("");
+                                                            }}
+                                                            className="w-full px-4 py-2 text-sm text-left hover:bg-indigo-50 rounded-lg flex justify-between items-center transition-colors group"
+                                                        >
+                                                            <div className="flex items-center gap-3">
+                                                                <span className="text-lg">{opt.icon}</span>
+                                                                <span className={category === opt.name ? "font-semibold text-indigo-600" : "text-gray-700"}>
+                                                                    {opt.name}
+                                                                </span>
+                                                            </div>
+                                                            {category === opt.name && <Check className="w-4 h-4 text-indigo-600" />}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Overlay for Click Outside */}
+                                    {showCategoryDropdown && (
+                                        <div
+                                            className="fixed inset-0 z-10"
+                                            onClick={() => {
+                                                setShowCategoryDropdown(false);
+                                                setCategorySearch("");
+                                            }}
+                                        />
+                                    )}
+
+                                    {category === "Lainnya" && (
+                                        <input
+                                            type="text"
+                                            placeholder="Masukkan nama kategori baru"
+                                            value={customCategory}
+                                            onChange={(e) => setCustomCategory(e.target.value)}
+                                            className="w-full mt-2 px-4 py-2.5 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-sm"
+                                        />
+                                    )}
+                                </div>
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-1">Tipe</label>
                                     <div className="grid grid-cols-2 gap-2 p-1 bg-gray-100 rounded-xl">
@@ -632,6 +747,86 @@ export default function Dashboard() {
                                         />
                                     )}
 
+                                    {/* Category Filter Dropdown (Searchable) */}
+                                    <div className="relative shrink-0">
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowHistoryCategoryDropdown(!showHistoryCategoryDropdown)}
+                                            className="px-3 py-2 h-[34px] rounded-full text-xs font-medium border border-gray-200 bg-white text-gray-600 hover:bg-gray-50 outline-none focus:ring-2 focus:ring-indigo-500/20 flex items-center gap-2 whitespace-nowrap"
+                                        >
+                                            <Tag className="w-3 h-3" />
+                                            {activeCategoryFilter === "all" ? "Semua Kategori" : activeCategoryFilter}
+                                            <ChevronDown className={`w-3 h-3 transition-transform ${showHistoryCategoryDropdown ? "rotate-180" : ""}`} />
+                                        </button>
+
+                                        {showHistoryCategoryDropdown && (
+                                            <div className="absolute z-20 left-0 lg:right-0 mt-2 w-60 bg-white rounded-2xl border border-gray-100 shadow-xl overflow-hidden animate-in fade-in zoom-in duration-200">
+                                                <div className="p-2 border-b border-gray-50 bg-gray-50/50">
+                                                    <div className="relative">
+                                                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-400" />
+                                                        <input
+                                                            type="text"
+                                                            placeholder="Cari kategori..."
+                                                            value={historyCategorySearch}
+                                                            onChange={(e) => setHistoryCategorySearch(e.target.value)}
+                                                            className="w-full pl-8 pr-3 py-1.5 rounded-lg bg-white border border-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 text-xs"
+                                                            autoFocus
+                                                        />
+                                                    </div>
+                                                </div>
+                                                <div className="max-h-60 overflow-y-auto p-1 py-1">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setActiveCategoryFilter("all");
+                                                            setShowHistoryCategoryDropdown(false);
+                                                            setHistoryCategorySearch("");
+                                                        }}
+                                                        className="w-full px-3 py-2 text-xs text-left hover:bg-indigo-50 rounded-lg flex justify-between items-center transition-colors group"
+                                                    >
+                                                        <span className={activeCategoryFilter === "all" ? "font-semibold text-indigo-600" : "text-gray-700"}>
+                                                            Semua Kategori
+                                                        </span>
+                                                        {activeCategoryFilter === "all" && <Check className="w-3 h-3 text-indigo-600" />}
+                                                    </button>
+                                                    {CATEGORY_OPTIONS.filter(opt =>
+                                                        opt.name.toLowerCase().includes(historyCategorySearch.toLowerCase())
+                                                    ).map((opt) => (
+                                                        <button
+                                                            key={opt.name}
+                                                            type="button"
+                                                            onClick={() => {
+                                                                setActiveCategoryFilter(opt.name);
+                                                                setShowHistoryCategoryDropdown(false);
+                                                                setHistoryCategorySearch("");
+                                                            }}
+                                                            className="w-full px-3 py-2 text-xs text-left hover:bg-indigo-50 rounded-lg flex justify-between items-center transition-colors group"
+                                                        >
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="text-sm">{opt.icon}</span>
+                                                                <span className={activeCategoryFilter === opt.name ? "font-semibold text-indigo-600" : "text-gray-700"}>
+                                                                    {opt.name}
+                                                                </span>
+                                                            </div>
+                                                            {activeCategoryFilter === opt.name && <Check className="w-3 h-3 text-indigo-600" />}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Overlay for Category Click Outside */}
+                                    {showHistoryCategoryDropdown && (
+                                        <div
+                                            className="fixed inset-0 z-10"
+                                            onClick={() => {
+                                                setShowHistoryCategoryDropdown(false);
+                                                setHistoryCategorySearch("");
+                                            }}
+                                        />
+                                    )}
+
                                     <button
                                         onClick={() => setActiveFilter("all")}
                                         className={`px-3 py-2 rounded-full text-xs font-medium border transition-colors h-[34px] flex items-center shrink-0 whitespace-nowrap ${activeFilter === "all" ? "bg-gray-900 text-white border-gray-900" : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
@@ -692,6 +887,13 @@ export default function Dashboard() {
                                                         {transaction.account && (
                                                             <span className={`ml-2 px-2 py-0.5 rounded-full text-[10px] border border-transparent font-medium ${getAccountColor(transaction.account)}`}>
                                                                 {transaction.account}
+                                                            </span>
+                                                        )}
+
+                                                        {transaction.category && (
+                                                            <span className="ml-2 px-2 py-0.5 rounded-full text-[10px] border border-gray-200 bg-gray-50 text-gray-600 font-medium flex items-center gap-1">
+                                                                <span>{CATEGORY_OPTIONS.find(c => c.name === transaction.category)?.icon || "🏷️"}</span>
+                                                                {transaction.category}
                                                             </span>
                                                         )}
                                                     </div>

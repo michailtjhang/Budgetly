@@ -9,6 +9,7 @@ const transactionSchema = z.object({
   type: z.enum(["income", "expense"]),
   date: z.string().optional(), // Allow flexible date input
   account: z.string().optional(), // NEW: Account/Bank source
+  category: z.string().optional(), // NEW: Category field
 });
 
 export async function GET() {
@@ -43,6 +44,7 @@ export async function POST(req: Request) {
         date: validatedData.date ? new Date(validatedData.date) : new Date(),
         userId: user.id,
         account: validatedData.account,
+        category: validatedData.category,
       },
     });
 
@@ -87,6 +89,7 @@ export async function PUT(req: Request) {
         type: validatedData.type,
         date: validatedData.date ? new Date(validatedData.date) : existingTransaction.date,
         account: validatedData.account,
+        category: validatedData.category,
       },
     });
 
