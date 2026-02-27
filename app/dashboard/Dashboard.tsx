@@ -321,10 +321,12 @@ export default function Dashboard() {
             <nav className="w-full bg-white/80 backdrop-blur-md border-b border-gray-200 sticky top-0 z-10">
                 <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
                     <div className="flex justify-between items-center h-16">
-                        <div className="flex items-center gap-2">
-                            <div className="bg-indigo-600 p-2 rounded-lg">
-                                <Wallet className="w-5 h-5 text-white" />
-                            </div>
+                        <div className="flex items-center gap-3">
+                            <img 
+                                src="/logo.png" 
+                                alt="Budgetly Logo" 
+                                className="w-10 h-10 object-contain rounded-xl"
+                            />
                             <h1 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-violet-600">
                                 Budgetly
                             </h1>

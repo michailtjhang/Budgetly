@@ -13,8 +13,12 @@ export default function Home() {
       </div>
 
       <div className="relative z-10 flex flex-col items-center max-w-2xl px-4 text-center">
-        <div className="mb-6 p-4 bg-white/50 backdrop-blur-xl rounded-2xl shadow-xl shadow-indigo-100/50 border border-white/50 inline-flex items-center justify-center text-indigo-600">
-          <Wallet className="w-12 h-12" />
+        <div className="mb-6">
+          <img
+            src="/logo.png"
+            alt="Budgetly Logo"
+            className="w-24 h-24 object-contain rounded-3xl shadow-2xl"
+          />
         </div>
 
         <h1 className="text-5xl md:text-6xl font-bold mb-6 tracking-tight text-gray-900">
