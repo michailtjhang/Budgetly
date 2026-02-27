@@ -37,6 +37,7 @@ const CATEGORY_ICONS: Record<string, string> = {
     "Top Up & Tabungan": "🏦",
     "Komunikasi & Internet": "📱",
     "Ibadah & Sosial": "🙏",
+    "Tempat Tinggal": "🏠",
     "Hobby & Gaming": "🎮",
     "Elektronik": "🎧",
     "Transportasi": "🚗",
@@ -219,6 +220,7 @@ export default function FinancialChart({ transactions, month }: FinancialChartPr
                                         paddingAngle={5}
                                         dataKey="value"
                                         stroke="none"
+                                        label={({ name, percent }) => `${name} ${((percent || 0) * 100).toFixed(0)}%`}
                                     >
                                         {pieData.map((entry, index) => (
                                             <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
@@ -270,6 +272,7 @@ export default function FinancialChart({ transactions, month }: FinancialChartPr
                                         stroke="none"
                                         animationBegin={0}
                                         animationDuration={1500}
+                                        label={({ name, percent }) => `${name} ${((percent || 0) * 100).toFixed(0)}%`}
                                     >
                                         {categoryData.map((entry, index) => (
                                             <Cell key={`cell-cat-${index}`} fill={CATEGORY_COLORS[index % CATEGORY_COLORS.length]} />

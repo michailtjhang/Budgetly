@@ -42,6 +42,7 @@ const CATEGORY_OPTIONS = [
     { name: "Top Up & Tabungan", icon: "🏦" },
     { name: "Komunikasi & Internet", icon: "📱" },
     { name: "Ibadah & Sosial", icon: "🙏" },
+    { name: "Tempat Tinggal", icon: "🏠" },
     { name: "Hobby & Gaming", icon: "🎮" },
     { name: "Elektronik", icon: "🎧" },
     { name: "Transportasi", icon: "🚗" },
