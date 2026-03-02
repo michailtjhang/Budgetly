@@ -229,8 +229,8 @@ export default function Dashboard() {
     // 2. Calculate net for specialized categories
     const netSpecializedExpense = NET_ONLY_CATEGORIES.reduce((totalNet, catName) => {
         const catTransactions = filteredByMonth.filter(t => t.category === catName);
-        const catIncome = catTransactions.filter(t => t.type === "income").reduce((s, t) => s + (t.amount || 0), 0);
-        const catExpense = catTransactions.filter(t => t.type === "expense").reduce((s, t) => s + (t.amount || 0), 0);
+        const catIncome = catTransactions.filter(t => t.type === "income").reduce((s, t) => s + (Number(t.amount) || 0), 0);
+        const catExpense = catTransactions.filter(t => t.type === "expense").reduce((s, t) => s + (Number(t.amount) || 0), 0);
 
         const netOutflow = catExpense - catIncome;
         return totalNet + (netOutflow > 0 ? netOutflow : 0);
@@ -246,18 +246,18 @@ export default function Dashboard() {
     // Calculate Overall Summary (All Time)
     const totalIncomeAllTime = (transactions || [])
         .filter((t) => t && t.type === "income")
-        .reduce((sum, t) => sum + (t.amount || 0), 0);
+        .reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
 
     const totalExpenseAllTime = (transactions || [])
         .filter((t) => t && t.type === "expense")
-        .reduce((sum, t) => sum + (t.amount || 0), 0);
+        .reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
 
     const totalBalanceAllTime = totalIncomeAllTime - totalExpenseAllTime;
 
     // Calculate Balance by Account (All Time)
     const accountBalances = (transactions || []).reduce((acc, t) => {
         const accountName = t.account || "Lainnya";
-        const amount = t.amount || 0;
+        const amount = Number(t.amount) || 0;
 
         if (!acc[accountName]) {
             acc[accountName] = 0;
