@@ -1,7 +1,0 @@
-{
-  "buildCommand": "prisma generate && next build",
-  "outputDirectory": ".next",
-  "env": {
-    "DATABASE_URL": "@DATABASE_URL"
-  }
-}
