@@ -31,11 +31,7 @@ export const metadata: Metadata = {
     description: "Catat keuanganmu dengan aman dan mudah bersama Budgetly.",
     images: ["/logo.png"],
   },
-  icons: {
-    icon: "/icon.png",
-    shortcut: "/icon.png",
-    apple: "/icon.png",
-  },
+
   verification: {
     google: "we9mD5OQZFEOt9ESLYdSrtXXh9LF-PkrZi23rlnJRx0",
   },

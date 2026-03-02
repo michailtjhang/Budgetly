@@ -1,5 +1,6 @@
 import { SignedIn, SignedOut, SignInButton, UserButton } from "@clerk/nextjs";
 import Link from "next/link";
+import Image from "next/image";
 import { ArrowRight } from "lucide-react";
 
 export default function Home() {
@@ -14,10 +15,12 @@ export default function Home() {
 
       <div className="relative z-10 flex flex-col items-center max-w-2xl px-4 text-center">
         <div className="mb-6">
-          <img
+          <Image
             src="/logo.png"
             alt="Budgetly Logo"
-            className="w-24 h-24 object-contain rounded-3xl shadow-2xl"
+            width={96}
+            height={96}
+            className="object-contain rounded-3xl shadow-2xl"
           />
         </div>
 
