@@ -558,7 +558,7 @@ export default function Dashboard() {
                                                                         className="w-full px-4 py-3 text-sm text-left bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-xl flex items-center gap-3 transition-colors font-medium border border-indigo-100"
                                                                     >
                                                                         <Plus className="w-4 h-4" />
-                                                                        <span>Tambah "{accountSearch}"</span>
+                                                                        <span>Tambah &quot;{accountSearch}&quot;</span>
                                                                     </button>
                                                                 )}
                                                             </div>
