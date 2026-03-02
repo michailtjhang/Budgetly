@@ -322,9 +322,9 @@ export default function Dashboard() {
                 <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
                     <div className="flex justify-between items-center h-16">
                         <div className="flex items-center gap-3">
-                            <img 
-                                src="/logo.png" 
-                                alt="Budgetly Logo" 
+                            <img
+                                src="/logo.png"
+                                alt="Budgetly Logo"
                                 className="w-10 h-10 object-contain rounded-xl"
                             />
                             <h1 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-violet-600">
@@ -409,27 +409,31 @@ export default function Dashboard() {
                 </div>
 
                 {/* Account Balances Scrollable Section */}
-                <div>
-                    <h3 className="text-lg font-semibold text-gray-800 mb-4 px-1">Saldo per Akun</h3>
-                    <div className="flex gap-4 overflow-x-auto pb-4 snap-x">
-                        {allAccounts.map((acc, idx) => {
-                            const balance = accountBalances[acc] || 0;
-                            return (
-                                <div key={idx} className="min-w-[160px] bg-white p-4 rounded-2xl border border-gray-100 shadow-sm snap-start flex-shrink-0">
-                                    <div className="flex items-center gap-2 mb-2">
-                                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${getAccountColor(acc)}`}>
-                                            {acc.substring(0, 1)}
+                {allAccounts.some(acc => (accountBalances[acc] || 0) !== 0) && (
+                    <div>
+                        <h3 className="text-lg font-semibold text-gray-800 mb-4 px-1">Saldo per Akun</h3>
+                        <div className="flex gap-4 overflow-x-auto pb-4 snap-x">
+                            {allAccounts
+                                .filter(acc => (accountBalances[acc] || 0) !== 0)
+                                .map((acc, idx) => {
+                                    const balance = accountBalances[acc] || 0;
+                                    return (
+                                        <div key={idx} className="min-w-[160px] bg-white p-4 rounded-2xl border border-gray-100 shadow-sm snap-start flex-shrink-0">
+                                            <div className="flex items-center gap-2 mb-2">
+                                                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${getAccountColor(acc)}`}>
+                                                    {acc.substring(0, 1)}
+                                                </div>
+                                                <span className="text-sm font-medium text-gray-600 truncate">{acc}</span>
+                                            </div>
+                                            <p className={`text-lg font-bold ${balance >= 0 ? 'text-gray-900' : 'text-rose-600'}`}>
+                                                Rp {formatRupiah(balance)}
+                                            </p>
                                         </div>
-                                        <span className="text-sm font-medium text-gray-600 truncate">{acc}</span>
-                                    </div>
-                                    <p className={`text-lg font-bold ${balance >= 0 ? 'text-gray-900' : 'text-rose-600'}`}>
-                                        Rp {formatRupiah(balance)}
-                                    </p>
-                                </div>
-                            );
-                        })}
+                                    );
+                                })}
+                        </div>
                     </div>
-                </div>
+                )}
 
                 {/* Charts Section */}
                 <FinancialChart transactions={filteredByMonth} month={selectedMonth} />
@@ -538,8 +542,25 @@ export default function Dashboard() {
                                                     {ACCOUNT_OPTIONS.filter(opt =>
                                                         opt.toLowerCase().includes(accountSearch.toLowerCase())
                                                     ).length === 0 && (
-                                                            <div className="px-4 py-8 text-center text-gray-400 text-sm italic">
-                                                                Akun tidak ditemukan
+                                                            <div className="p-2 space-y-2">
+                                                                <div className="px-4 py-3 text-center text-gray-400 text-xs italic">
+                                                                    Akun tidak ditemukan
+                                                                </div>
+                                                                {accountSearch.trim() !== "" && (
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => {
+                                                                            setAccount("Lainnya");
+                                                                            setCustomAccount(accountSearch);
+                                                                            setShowAccountDropdown(false);
+                                                                            setAccountSearch("");
+                                                                        }}
+                                                                        className="w-full px-4 py-3 text-sm text-left bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-xl flex items-center gap-3 transition-colors font-medium border border-indigo-100"
+                                                                    >
+                                                                        <Plus className="w-4 h-4" />
+                                                                        <span>Tambah "{accountSearch}"</span>
+                                                                    </button>
+                                                                )}
                                                             </div>
                                                         )}
                                                 </div>
