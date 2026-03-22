@@ -375,6 +375,18 @@ export default function Dashboard() {
                 </div>
             </nav>
 
+            {/* Running Text / Marquee Banner */}
+            <div className="bg-rose-50 border-b border-rose-100 overflow-hidden py-2 relative flex items-center shadow-inner">
+                <div className="whitespace-nowrap animate-marquee flex items-center gap-6 text-sm font-medium text-rose-600 w-full">
+                    <span>☕ Suka dengan Budgetly? Dukung pengembangan aplikasi ini dengan traktir kopi kreatornya!</span>
+                    <a href="https://trakteer.id/michail.kx" target="_blank" rel="noopener noreferrer" className="underline font-bold hover:text-rose-800 transition-colors">Traktir Sekarang &rarr;</a>
+                    <span className="mx-8 opacity-50">&bull;</span>
+                    <span>✨ Terima kasih sudah menggunakan Budgetly untuk mengatur keuanganmu! ✨</span>
+                    <span className="mx-8 opacity-50">&bull;</span>
+                    <span>🚀 Feedback kamu sangat berarti untuk versi Budgetly selanjutnya!</span>
+                </div>
+            </div>
+
             <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
 
                 {/* Hero / Balance Section */}

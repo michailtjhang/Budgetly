@@ -6,7 +6,17 @@ module.exports = {
     ],
     darkMode: "class", // penting untuk dark mode toggle
     theme: {
-        extend: {},
+        extend: {
+            animation: {
+                marquee: 'marquee 25s linear infinite',
+            },
+            keyframes: {
+                marquee: {
+                    '0%': { transform: 'translateX(100vw)' },
+                    '100%': { transform: 'translateX(-100%)' },
+                },
+            },
+        },
     },
     plugins: [],
 }
