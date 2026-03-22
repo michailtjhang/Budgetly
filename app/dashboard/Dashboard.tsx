@@ -19,7 +19,10 @@ import {
     ChevronDown,
     Check,
     Plus,
-    Tag
+    Tag,
+    Filter,
+    FilterX,
+    Coffee
 } from "lucide-react";
 import FinancialChart from "@/components/FinancialChart";
 
@@ -334,7 +337,19 @@ export default function Dashboard() {
                                 Budgetly
                             </h1>
                         </div>
-                        <div className="flex items-center gap-4">
+                        <div className="flex items-center gap-3 sm:gap-4">
+                            {/* Trakteer Button */}
+                            <a
+                                href="https://trakteer.id/michail.kx"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex items-center justify-center p-2 sm:px-3 sm:py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-lg text-sm font-medium transition-colors border border-rose-100 shadow-sm"
+                                title="Support on Trakteer"
+                            >
+                                <Coffee className="w-4 h-4 sm:mr-2" />
+                                <span className="hidden sm:inline">Traktir Kopi</span>
+                            </a>
+
                             {/* Month Selector in Navbar */}
                             <div className="hidden sm:flex items-center bg-gray-100 rounded-lg px-2 py-1">
                                 <Calendar className="w-4 h-4 text-gray-500 mr-2" />
