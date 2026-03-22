@@ -376,8 +376,8 @@ export default function Dashboard() {
             </nav>
 
             {/* Running Text / Marquee Banner */}
-            <div className="bg-rose-50 border-b border-rose-100 overflow-hidden py-2 relative flex items-center shadow-inner">
-                <div className="whitespace-nowrap animate-marquee flex items-center gap-6 text-sm font-medium text-rose-600 w-full">
+            <div className="bg-rose-50 border-b border-rose-100 overflow-hidden py-2 relative flex items-center shadow-inner w-full">
+                <div className="animate-marquee whitespace-nowrap flex items-center gap-6 text-sm font-medium text-rose-600 w-max shrink-0">
                     <span>☕ Suka dengan Budgetly? Dukung pengembangan aplikasi ini dengan traktir kopi kreatornya!</span>
                     <a href="https://trakteer.id/michail.kx" target="_blank" rel="noopener noreferrer" className="underline font-bold hover:text-rose-800 transition-colors">Traktir Sekarang &rarr;</a>
                     <span className="mx-8 opacity-50">&bull;</span>
