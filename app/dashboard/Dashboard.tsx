@@ -90,6 +90,23 @@ export default function Dashboard() {
     const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7)); // YYYY-MM
     const [loading, setLoading] = useState(false);
 
+    // 📅 Custom Month Picker State
+    const [showMonthPicker, setShowMonthPicker] = useState(false);
+    const [pickerYear, setPickerYear] = useState(new Date().getFullYear());
+
+    const MONTHS_ID = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
+
+    const selectMonth = (monthIndex: number) => {
+        const mm = String(monthIndex + 1).padStart(2, "0");
+        setSelectedMonth(`${pickerYear}-${mm}`);
+        setShowMonthPicker(false);
+    };
+
+    const displayMonthLabel = () => {
+        const [y, m] = selectedMonth.split("-");
+        return `${MONTHS_ID[parseInt(m) - 1]} ${y}`;
+    };
+
     // 📷 Scan Invoice State
     const [showScanModal, setShowScanModal] = useState(false);
     const [scanLoading, setScanLoading] = useState(false);
@@ -433,28 +450,70 @@ export default function Dashboard() {
                                 <span className="hidden sm:inline">Traktir Kopi</span>
                             </a>
 
-                            {/* Month Selector in Navbar */}
-                            <div className="hidden sm:flex items-center bg-gray-100 rounded-lg px-2 py-1">
-                                <Calendar className="w-4 h-4 text-gray-500 mr-2" />
-                                <input
-                                    type="month"
-                                    value={selectedMonth}
-                                    onChange={(e) => setSelectedMonth(e.target.value)}
-                                    className="bg-transparent border-none text-sm font-medium text-gray-700 focus:ring-0 outline-none"
-                                />
+                            {/* Month Picker */}
+                            <div className="relative">
+                                <button
+                                    onClick={() => { setShowMonthPicker(!showMonthPicker); setPickerYear(parseInt(selectedMonth.split("-")[0])); }}
+                                    className="flex items-center gap-2 bg-indigo-50 hover:bg-indigo-100 border border-indigo-100 text-indigo-700 rounded-xl px-3 py-2 text-sm font-semibold transition-all shadow-sm"
+                                >
+                                    <Calendar className="w-4 h-4" />
+                                    <span>{displayMonthLabel()}</span>
+                                    <ChevronDown className={`w-3.5 h-3.5 transition-transform text-indigo-400 ${showMonthPicker ? "rotate-180" : ""}`} />
+                                </button>
+
+                                {showMonthPicker && (
+                                    <>
+                                        <div className="fixed inset-0 z-40" onClick={() => setShowMonthPicker(false)} />
+                                        <div className="absolute right-0 mt-2 w-64 bg-white rounded-2xl shadow-xl border border-gray-100 z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+                                            {/* Year Navigator */}
+                                            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-50 bg-gray-50/80">
+                                                <button
+                                                    onClick={() => setPickerYear(pickerYear - 1)}
+                                                    className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-gray-200 text-gray-500 transition-colors"
+                                                >
+                                                    <ChevronDown className="w-4 h-4 rotate-90" />
+                                                </button>
+                                                <span className="text-sm font-bold text-gray-800">{pickerYear}</span>
+                                                <button
+                                                    onClick={() => setPickerYear(pickerYear + 1)}
+                                                    className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-gray-200 text-gray-500 transition-colors"
+                                                >
+                                                    <ChevronDown className="w-4 h-4 -rotate-90" />
+                                                </button>
+                                            </div>
+                                            {/* Month Grid */}
+                                            <div className="grid grid-cols-3 gap-1.5 p-3">
+                                                {MONTHS_ID.map((m, i) => {
+                                                    const val = `${pickerYear}-${String(i + 1).padStart(2, "0")}`;
+                                                    const isActive = val === selectedMonth;
+                                                    const isCurrentMonth = val === new Date().toISOString().slice(0, 7);
+                                                    return (
+                                                        <button
+                                                            key={m}
+                                                            onClick={() => selectMonth(i)}
+                                                            className={`py-2 rounded-xl text-xs font-semibold transition-all ${
+                                                                isActive
+                                                                    ? "bg-indigo-600 text-white shadow-md shadow-indigo-200"
+                                                                    : isCurrentMonth
+                                                                    ? "bg-indigo-50 text-indigo-600 border border-indigo-200"
+                                                                    : "hover:bg-gray-100 text-gray-600"
+                                                            }`}
+                                                        >
+                                                            {m}
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    </>
+                                )}
                             </div>
+
                             <UserButton afterSignOutUrl="/" />
                         </div>
                     </div>
-                    {/* Mobile Month Selector */}
-                    <div className="sm:hidden pb-2">
-                        <input
-                            type="month"
-                            value={selectedMonth}
-                            onChange={(e) => setSelectedMonth(e.target.value)}
-                            className="w-full bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm"
-                        />
-                    </div>
+                    {/* Mobile: extra space when no extra row needed */}
+                    <div className="sm:hidden" />
                 </div>
             </nav>
 
