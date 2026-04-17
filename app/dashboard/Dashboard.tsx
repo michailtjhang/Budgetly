@@ -22,7 +22,13 @@ import {
     Tag,
     Filter,
     FilterX,
-    Coffee
+    Coffee,
+    Camera,
+    ImageIcon,
+    ScanLine,
+    X,
+    Sparkles,
+    AlertCircle
 } from "lucide-react";
 import FinancialChart from "@/components/FinancialChart";
 
@@ -83,6 +89,14 @@ export default function Dashboard() {
     const [showHistoryCategoryDropdown, setShowHistoryCategoryDropdown] = useState(false);
     const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7)); // YYYY-MM
     const [loading, setLoading] = useState(false);
+
+    // 📷 Scan Invoice State
+    const [showScanModal, setShowScanModal] = useState(false);
+    const [scanLoading, setScanLoading] = useState(false);
+    const [scanPreview, setScanPreview] = useState<string | null>(null);
+    const [scanError, setScanError] = useState<string | null>(null);
+    const [scanSuccess, setScanSuccess] = useState(false);
+    const [scanConfidence, setScanConfidence] = useState<number>(0);
 
     // 🚀 Load data dari JSON via API
     useEffect(() => {
@@ -182,6 +196,75 @@ export default function Dashboard() {
         setCategory("Lainnya");
         setCustomCategory("");
         setEditingId(null);
+    };
+
+    // 📷 Scan Invoice Handler
+    const handleScanImage = async (file: File) => {
+        if (!file) return;
+
+        // Show preview
+        const reader = new FileReader();
+        reader.onload = (e) => setScanPreview(e.target?.result as string);
+        reader.readAsDataURL(file);
+
+        setScanLoading(true);
+        setScanError(null);
+        setScanSuccess(false);
+
+        try {
+            const formData = new FormData();
+            formData.append("image", file);
+
+            const res = await fetch("/api/scan-invoice", {
+                method: "POST",
+                body: formData,
+            });
+
+            const data = await res.json();
+
+            if (!res.ok || data.error) {
+                setScanError(data.error || "Gagal membaca struk. Coba foto yang lebih jelas.");
+                return;
+            }
+
+            // Auto-fill form
+            setDescription(data.description || "");
+            setAmount(data.amount || "");
+            setDate(data.date || new Date().toISOString().split("T")[0]);
+            setType(data.type || "expense");
+
+            if (data.category && CATEGORY_OPTIONS.some(opt => opt.name === data.category)) {
+                setCategory(data.category);
+            } else {
+                setCategory("Lainnya");
+                setCustomCategory(data.category || "");
+            }
+
+            setScanConfidence(data.confidence || 0);
+            setScanSuccess(true);
+
+            // Close modal after short delay
+            setTimeout(() => {
+                setShowScanModal(false);
+                setScanPreview(null);
+                setScanSuccess(false);
+                window.scrollTo({ top: 0, behavior: "smooth" });
+            }, 1500);
+
+        } catch (err) {
+            console.error(err);
+            setScanError("Terjadi kesalahan jaringan. Periksa koneksi internet.");
+        } finally {
+            setScanLoading(false);
+        }
+    };
+
+    const closeScanModal = () => {
+        setShowScanModal(false);
+        setScanPreview(null);
+        setScanError(null);
+        setScanSuccess(false);
+        setScanLoading(false);
     };
 
     const handleEdit = (t: Transaction) => {
@@ -480,11 +563,23 @@ export default function Dashboard() {
                                     {editingId ? <Pencil className="w-5 h-5 text-indigo-600" /> : <PlusCircle className="w-5 h-5 text-indigo-600" />}
                                     {editingId ? "Edit Transaksi" : "Tambah Transaksi"}
                                 </h3>
-                                {editingId && (
-                                    <button onClick={resetForm} className="text-xs text-rose-500 hover:text-rose-700 flex items-center gap-1 bg-rose-50 px-2 py-1 rounded-full">
-                                        <XCircle className="w-3 h-3" /> Batal
-                                    </button>
-                                )}
+                                <div className="flex items-center gap-2">
+                                    {!editingId && (
+                                        <button
+                                            onClick={() => setShowScanModal(true)}
+                                            className="text-xs text-indigo-600 hover:text-indigo-800 flex items-center gap-1.5 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-full transition-all font-medium border border-indigo-100 shadow-sm"
+                                            title="Scan struk/invoice"
+                                        >
+                                            <ScanLine className="w-3.5 h-3.5" />
+                                            Scan Struk
+                                        </button>
+                                    )}
+                                    {editingId && (
+                                        <button onClick={resetForm} className="text-xs text-rose-500 hover:text-rose-700 flex items-center gap-1 bg-rose-50 px-2 py-1 rounded-full">
+                                            <XCircle className="w-3 h-3" /> Batal
+                                        </button>
+                                    )}
+                                </div>
                             </div>
 
                             <div className="space-y-4">
@@ -1009,6 +1104,141 @@ export default function Dashboard() {
                     </div>
                 </div>
             </div>
+
+            {/* 📷 Scan Invoice Modal */}
+            {showScanModal && (
+                <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
+                    <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-in slide-in-from-bottom duration-300">
+
+                        {/* Modal Header */}
+                        <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b border-gray-100">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 bg-indigo-100 rounded-2xl flex items-center justify-center">
+                                    <ScanLine className="w-5 h-5 text-indigo-600" />
+                                </div>
+                                <div>
+                                    <h4 className="font-bold text-gray-900 text-base">Scan Struk / Invoice</h4>
+                                    <p className="text-xs text-gray-400">AI akan membaca data otomatis</p>
+                                </div>
+                            </div>
+                            <button
+                                onClick={closeScanModal}
+                                className="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center transition-colors"
+                            >
+                                <X className="w-4 h-4 text-gray-500" />
+                            </button>
+                        </div>
+
+                        <div className="p-6 space-y-4">
+
+                            {/* Preview Area */}
+                            {scanPreview ? (
+                                <div className="relative rounded-2xl overflow-hidden border border-gray-100 bg-gray-50">
+                                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                                    <img
+                                        src={scanPreview}
+                                        alt="Preview struk"
+                                        className="w-full max-h-56 object-contain"
+                                    />
+                                    {scanLoading && (
+                                        <div className="absolute inset-0 bg-white/80 backdrop-blur-sm flex flex-col items-center justify-center gap-3">
+                                            <div className="relative">
+                                                <div className="w-12 h-12 border-4 border-indigo-100 border-t-indigo-600 rounded-full animate-spin" />
+                                                <Sparkles className="w-4 h-4 text-indigo-600 absolute inset-0 m-auto" />
+                                            </div>
+                                            <p className="text-sm font-medium text-indigo-700">Sedang menganalisis struk...</p>
+                                            <p className="text-xs text-gray-400">AI sedang membaca data transaksi</p>
+                                        </div>
+                                    )}
+                                    {scanSuccess && (
+                                        <div className="absolute inset-0 bg-emerald-500/90 backdrop-blur-sm flex flex-col items-center justify-center gap-2">
+                                            <div className="w-14 h-14 bg-white rounded-full flex items-center justify-center shadow-lg">
+                                                <Check className="w-7 h-7 text-emerald-500" />
+                                            </div>
+                                            <p className="text-white font-bold text-base">Struk berhasil dibaca!</p>
+                                            {scanConfidence > 0 && (
+                                                <p className="text-emerald-100 text-xs">Akurasi: {Math.round(scanConfidence * 100)}%</p>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+                            ) : (
+                                /* Upload Options */
+                                <div className="grid grid-cols-2 gap-3">
+                                    {/* Camera Option */}
+                                    <label className="group flex flex-col items-center justify-center gap-3 p-5 rounded-2xl border-2 border-dashed border-indigo-200 hover:border-indigo-400 bg-indigo-50/50 hover:bg-indigo-50 cursor-pointer transition-all">
+                                        <input
+                                            type="file"
+                                            accept="image/*"
+                                            capture="environment"
+                                            className="hidden"
+                                            onChange={(e) => {
+                                                const file = e.target.files?.[0];
+                                                if (file) handleScanImage(file);
+                                            }}
+                                        />
+                                        <div className="w-12 h-12 bg-indigo-100 group-hover:bg-indigo-200 rounded-2xl flex items-center justify-center transition-colors">
+                                            <Camera className="w-6 h-6 text-indigo-600" />
+                                        </div>
+                                        <div className="text-center">
+                                            <p className="text-sm font-semibold text-gray-800">Buka Kamera</p>
+                                            <p className="text-xs text-gray-400 mt-0.5">Foto struk langsung</p>
+                                        </div>
+                                    </label>
+
+                                    {/* Gallery Option */}
+                                    <label className="group flex flex-col items-center justify-center gap-3 p-5 rounded-2xl border-2 border-dashed border-violet-200 hover:border-violet-400 bg-violet-50/50 hover:bg-violet-50 cursor-pointer transition-all">
+                                        <input
+                                            type="file"
+                                            accept="image/*"
+                                            className="hidden"
+                                            onChange={(e) => {
+                                                const file = e.target.files?.[0];
+                                                if (file) handleScanImage(file);
+                                            }}
+                                        />
+                                        <div className="w-12 h-12 bg-violet-100 group-hover:bg-violet-200 rounded-2xl flex items-center justify-center transition-colors">
+                                            <ImageIcon className="w-6 h-6 text-violet-600" />
+                                        </div>
+                                        <div className="text-center">
+                                            <p className="text-sm font-semibold text-gray-800">Dari Galeri</p>
+                                            <p className="text-xs text-gray-400 mt-0.5">Screenshot / foto</p>
+                                        </div>
+                                    </label>
+                                </div>
+                            )}
+
+                            {/* Error State */}
+                            {scanError && (
+                                <div className="flex items-start gap-3 p-4 bg-rose-50 rounded-2xl border border-rose-100">
+                                    <AlertCircle className="w-4 h-4 text-rose-500 mt-0.5 shrink-0" />
+                                    <div>
+                                        <p className="text-sm font-medium text-rose-700">{scanError}</p>
+                                        <button
+                                            onClick={() => { setScanError(null); setScanPreview(null); }}
+                                            className="text-xs text-rose-500 hover:text-rose-700 mt-1 underline"
+                                        >
+                                            Coba lagi
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Tips */}
+                            {!scanPreview && (
+                                <div className="bg-amber-50 rounded-2xl p-4 border border-amber-100">
+                                    <p className="text-xs font-semibold text-amber-700 mb-1.5">💡 Tips agar hasil lebih akurat:</p>
+                                    <ul className="space-y-1">
+                                        <li className="text-xs text-amber-600">• Pastikan struk terlihat jelas & tidak blur</li>
+                                        <li className="text-xs text-amber-600">• Foto dengan pencahayaan yang cukup</li>
+                                        <li className="text-xs text-amber-600">• Bisa dari struk fisik, nota digital, atau screenshot</li>
+                                    </ul>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
         </main>
     );
 }
