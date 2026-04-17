@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { UserButton } from "@clerk/nextjs";
 import Image from "next/image";
 import {
@@ -93,8 +93,37 @@ export default function Dashboard() {
     // 📅 Custom Month Picker State
     const [showMonthPicker, setShowMonthPicker] = useState(false);
     const [pickerYear, setPickerYear] = useState(new Date().getFullYear());
+    const [pickerPos, setPickerPos] = useState({ top: 0, right: 0 });
 
     const MONTHS_ID = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
+
+    const monthPickerRef = useRef<HTMLDivElement>(null);
+    const monthBtnRef = useRef<HTMLButtonElement>(null);
+
+    useEffect(() => {
+        const handleClickOutside = (e: MouseEvent) => {
+            if (monthPickerRef.current && !monthPickerRef.current.contains(e.target as Node)
+                && monthBtnRef.current && !monthBtnRef.current.contains(e.target as Node)) {
+                setShowMonthPicker(false);
+            }
+        };
+        if (showMonthPicker) {
+            document.addEventListener("mousedown", handleClickOutside);
+        }
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, [showMonthPicker]);
+
+    const openMonthPicker = () => {
+        if (monthBtnRef.current) {
+            const rect = monthBtnRef.current.getBoundingClientRect();
+            setPickerPos({
+                top: rect.bottom + 8,
+                right: window.innerWidth - rect.right,
+            });
+        }
+        setPickerYear(parseInt(selectedMonth.split("-")[0]));
+        setShowMonthPicker(!showMonthPicker);
+    };
 
     const selectMonth = (monthIndex: number) => {
         const mm = String(monthIndex + 1).padStart(2, "0");
@@ -450,64 +479,16 @@ export default function Dashboard() {
                                 <span className="hidden sm:inline">Traktir Kopi</span>
                             </a>
 
-                            {/* Month Picker */}
-                            <div className="relative">
-                                <button
-                                    onClick={() => { setShowMonthPicker(!showMonthPicker); setPickerYear(parseInt(selectedMonth.split("-")[0])); }}
-                                    className="flex items-center gap-2 bg-indigo-50 hover:bg-indigo-100 border border-indigo-100 text-indigo-700 rounded-xl px-3 py-2 text-sm font-semibold transition-all shadow-sm"
-                                >
-                                    <Calendar className="w-4 h-4" />
-                                    <span>{displayMonthLabel()}</span>
-                                    <ChevronDown className={`w-3.5 h-3.5 transition-transform text-indigo-400 ${showMonthPicker ? "rotate-180" : ""}`} />
-                                </button>
-
-                                {showMonthPicker && (
-                                    <>
-                                        <div className="fixed inset-0 z-40" onClick={() => setShowMonthPicker(false)} />
-                                        <div className="absolute right-0 mt-2 w-64 bg-white rounded-2xl shadow-xl border border-gray-100 z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
-                                            {/* Year Navigator */}
-                                            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-50 bg-gray-50/80">
-                                                <button
-                                                    onClick={() => setPickerYear(pickerYear - 1)}
-                                                    className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-gray-200 text-gray-500 transition-colors"
-                                                >
-                                                    <ChevronDown className="w-4 h-4 rotate-90" />
-                                                </button>
-                                                <span className="text-sm font-bold text-gray-800">{pickerYear}</span>
-                                                <button
-                                                    onClick={() => setPickerYear(pickerYear + 1)}
-                                                    className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-gray-200 text-gray-500 transition-colors"
-                                                >
-                                                    <ChevronDown className="w-4 h-4 -rotate-90" />
-                                                </button>
-                                            </div>
-                                            {/* Month Grid */}
-                                            <div className="grid grid-cols-3 gap-1.5 p-3">
-                                                {MONTHS_ID.map((m, i) => {
-                                                    const val = `${pickerYear}-${String(i + 1).padStart(2, "0")}`;
-                                                    const isActive = val === selectedMonth;
-                                                    const isCurrentMonth = val === new Date().toISOString().slice(0, 7);
-                                                    return (
-                                                        <button
-                                                            key={m}
-                                                            onClick={() => selectMonth(i)}
-                                                            className={`py-2 rounded-xl text-xs font-semibold transition-all ${
-                                                                isActive
-                                                                    ? "bg-indigo-600 text-white shadow-md shadow-indigo-200"
-                                                                    : isCurrentMonth
-                                                                    ? "bg-indigo-50 text-indigo-600 border border-indigo-200"
-                                                                    : "hover:bg-gray-100 text-gray-600"
-                                                            }`}
-                                                        >
-                                                            {m}
-                                                        </button>
-                                                    );
-                                                })}
-                                            </div>
-                                        </div>
-                                    </>
-                                )}
-                            </div>
+                            {/* Month Picker Trigger Button */}
+                            <button
+                                ref={monthBtnRef}
+                                onClick={openMonthPicker}
+                                className="flex items-center gap-2 bg-indigo-50 hover:bg-indigo-100 border border-indigo-100 text-indigo-700 rounded-xl px-3 py-2 text-sm font-semibold transition-all shadow-sm"
+                            >
+                                <Calendar className="w-4 h-4" />
+                                <span>{displayMonthLabel()}</span>
+                                <ChevronDown className={`w-3.5 h-3.5 transition-transform text-indigo-400 ${showMonthPicker ? "rotate-180" : ""}`} />
+                            </button>
 
                             <UserButton afterSignOutUrl="/" />
                         </div>
@@ -1163,6 +1144,60 @@ export default function Dashboard() {
                     </div>
                 </div>
             </div>
+
+            {/* 📅 Month Picker Dropdown — rendered at root to escape navbar stacking context */}
+            {showMonthPicker && (
+                <div
+                    ref={monthPickerRef}
+                    style={{
+                        position: "fixed",
+                        top: pickerPos.top,
+                        right: pickerPos.right,
+                        zIndex: 9999,
+                    }}
+                    className="w-64 bg-white rounded-2xl shadow-2xl border border-gray-100 animate-in fade-in zoom-in-95 duration-150"
+                >
+                    {/* Year Navigator */}
+                    <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 bg-gray-50 rounded-t-2xl">
+                        <button
+                            onClick={() => setPickerYear(pickerYear - 1)}
+                            className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-gray-200 text-gray-500 transition-colors"
+                        >
+                            <ChevronDown className="w-4 h-4 rotate-90" />
+                        </button>
+                        <span className="text-sm font-bold text-gray-800">{pickerYear}</span>
+                        <button
+                            onClick={() => setPickerYear(pickerYear + 1)}
+                            className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-gray-200 text-gray-500 transition-colors"
+                        >
+                            <ChevronDown className="w-4 h-4 -rotate-90" />
+                        </button>
+                    </div>
+                    {/* Month Grid */}
+                    <div className="grid grid-cols-3 gap-1.5 p-3">
+                        {MONTHS_ID.map((m, i) => {
+                            const val = `${pickerYear}-${String(i + 1).padStart(2, "0")}`;
+                            const isActive = val === selectedMonth;
+                            const isCurrentMonth = val === new Date().toISOString().slice(0, 7);
+                            return (
+                                <button
+                                    key={m}
+                                    onClick={() => selectMonth(i)}
+                                    className={`py-2 rounded-xl text-xs font-semibold transition-all ${
+                                        isActive
+                                            ? "bg-indigo-600 text-white shadow-md shadow-indigo-200"
+                                            : isCurrentMonth
+                                            ? "bg-indigo-50 text-indigo-600 border border-indigo-200"
+                                            : "hover:bg-gray-100 text-gray-600"
+                                    }`}
+                                >
+                                    {m}
+                                </button>
+                            );
+                        })}
+                    </div>
+                </div>
+            )}
 
             {/* 📷 Scan Invoice Modal */}
             {showScanModal && (
