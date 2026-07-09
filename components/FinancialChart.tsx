@@ -45,6 +45,7 @@ const CATEGORY_ICONS: Record<string, string> = {
     "Pendidikan": "📚",
     "Tagihan": "📝",
     "Penghasilan": "💰",
+    "Bunga": "🌱",
     "Lainnya": "🏷️"
 };
 
@@ -66,13 +67,22 @@ export default function FinancialChart({ transactions, month }: FinancialChartPr
 
         const dayTransactions = transactions.filter(t => t.date.startsWith(dateStr));
 
-        const income = dayTransactions
+        let income = dayTransactions
             .filter(t => t.type === "income" && !EXCLUDED_CATEGORIES.includes(t.category || ""))
             .reduce((sum, t) => sum + (t.amount || 0), 0);
 
-        const expense = dayTransactions
+        let expense = dayTransactions
             .filter(t => t.type === "expense" && !EXCLUDED_CATEGORIES.includes(t.category || ""))
             .reduce((sum, t) => sum + (t.amount || 0), 0);
+
+        // Include daily net profit/loss for special categories
+        EXCLUDED_CATEGORIES.forEach(cat => {
+            const catInc = dayTransactions.filter(t => t.type === "income" && t.category === cat).reduce((s, t) => s + (t.amount || 0), 0);
+            const catExp = dayTransactions.filter(t => t.type === "expense" && t.category === cat).reduce((s, t) => s + (t.amount || 0), 0);
+            const net = catExp - catInc;
+            if (net > 0) expense += net;
+            else if (net < 0) income += Math.abs(net);
+        });
 
         return {
             name: String(day),
@@ -83,13 +93,22 @@ export default function FinancialChart({ transactions, month }: FinancialChartPr
     });
 
     // 2. Prepare Data for Pie Chart (Income vs Expense)
-    const totalIncome = transactions
+    let totalIncome = transactions
         .filter(t => t.type === "income" && !EXCLUDED_CATEGORIES.includes(t.category || ""))
         .reduce((sum, t) => sum + (t.amount || 0), 0);
 
-    const totalExpense = transactions
+    let totalExpense = transactions
         .filter(t => t.type === "expense" && !EXCLUDED_CATEGORIES.includes(t.category || ""))
         .reduce((sum, t) => sum + (t.amount || 0), 0);
+
+    // Include monthly net profit/loss for special categories
+    EXCLUDED_CATEGORIES.forEach(cat => {
+        const catInc = transactions.filter(t => t.type === "income" && t.category === cat).reduce((s, t) => s + (t.amount || 0), 0);
+        const catExp = transactions.filter(t => t.type === "expense" && t.category === cat).reduce((s, t) => s + (t.amount || 0), 0);
+        const net = catExp - catInc;
+        if (net > 0) totalExpense += net;
+        else if (net < 0) totalIncome += Math.abs(net);
+    });
 
     const pieData = [
         { name: "Pemasukan", value: totalIncome },

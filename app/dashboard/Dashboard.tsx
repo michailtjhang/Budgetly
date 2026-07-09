@@ -60,6 +60,7 @@ const CATEGORY_OPTIONS = [
     { name: "Pendidikan", icon: "📚" },
     { name: "Tagihan", icon: "📝" },
     { name: "Penghasilan", icon: "💰" },
+    { name: "Bunga", icon: "🌱" },
     { name: "Lainnya", icon: "🏷️" }
 ];
 
