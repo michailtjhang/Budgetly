@@ -13,7 +13,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "Budgetly - Kelola Keuanganmu dengan Cerdas",
     description: "Pantau pengeluaran dan tabunganmu secara real-time dengan Budgetly. Aplikasi budget tracker modern untuk kebutuhan sehari-hari.",
-    url: "https://budgetly-app.vercel.app", // User will replace with actual domain if different
+    url: "https://budgetly-neon.vercel.app/",
     siteName: "Budgetly",
     images: [
       {

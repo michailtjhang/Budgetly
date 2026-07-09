@@ -360,17 +360,24 @@ export default function Dashboard() {
         .reduce((sum, t) => sum + (t.amount || 0), 0);
 
     // 2. Calculate net for specialized categories
-    const netSpecializedExpense = NET_ONLY_CATEGORIES.reduce((totalNet, catName) => {
+    let netSpecializedExpense = 0;
+    let netSpecializedIncome = 0;
+
+    NET_ONLY_CATEGORIES.forEach((catName) => {
         const catTransactions = filteredByMonth.filter(t => t.category === catName);
         const catIncome = catTransactions.filter(t => t.type === "income").reduce((s, t) => s + (Number(t.amount) || 0), 0);
         const catExpense = catTransactions.filter(t => t.type === "expense").reduce((s, t) => s + (Number(t.amount) || 0), 0);
 
         const netOutflow = catExpense - catIncome;
-        return totalNet + (netOutflow > 0 ? netOutflow : 0);
-    }, 0);
+        if (netOutflow > 0) {
+            netSpecializedExpense += netOutflow;
+        } else if (netOutflow < 0) {
+            netSpecializedIncome += Math.abs(netOutflow); // Surplus (untung) masuk Pemasukan
+        }
+    });
 
     // Final global totals for the dashboard boxes
-    const income = normalIncome; // Incomes in TopUp/Invest are treated as offsets, not "earned income"
+    const income = normalIncome + netSpecializedIncome;
     const expense = normalExpense + netSpecializedExpense;
 
     const balance = income - expense;
