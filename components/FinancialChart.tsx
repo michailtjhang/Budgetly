@@ -57,6 +57,9 @@ export default function FinancialChart({ transactions, month }: FinancialChartPr
         0
     ).getDate();
 
+    // Categories to exclude from gross charts (Area & Pie) because they represent transfers
+    const EXCLUDED_CATEGORIES = ["Top Up & Tabungan", "Investasi & Saham"];
+
     const dailyData = Array.from({ length: daysInMonth }, (_, i) => {
         const day = i + 1;
         const dateStr = `${month}-${String(day).padStart(2, "0")}`;
@@ -64,11 +67,11 @@ export default function FinancialChart({ transactions, month }: FinancialChartPr
         const dayTransactions = transactions.filter(t => t.date.startsWith(dateStr));
 
         const income = dayTransactions
-            .filter(t => t.type === "income")
+            .filter(t => t.type === "income" && !EXCLUDED_CATEGORIES.includes(t.category || ""))
             .reduce((sum, t) => sum + (t.amount || 0), 0);
 
         const expense = dayTransactions
-            .filter(t => t.type === "expense")
+            .filter(t => t.type === "expense" && !EXCLUDED_CATEGORIES.includes(t.category || ""))
             .reduce((sum, t) => sum + (t.amount || 0), 0);
 
         return {
@@ -81,11 +84,11 @@ export default function FinancialChart({ transactions, month }: FinancialChartPr
 
     // 2. Prepare Data for Pie Chart (Income vs Expense)
     const totalIncome = transactions
-        .filter(t => t.type === "income")
+        .filter(t => t.type === "income" && !EXCLUDED_CATEGORIES.includes(t.category || ""))
         .reduce((sum, t) => sum + (t.amount || 0), 0);
 
     const totalExpense = transactions
-        .filter(t => t.type === "expense")
+        .filter(t => t.type === "expense" && !EXCLUDED_CATEGORIES.includes(t.category || ""))
         .reduce((sum, t) => sum + (t.amount || 0), 0);
 
     const pieData = [
