@@ -1,12 +1,21 @@
-import { clerkMiddleware } from "@clerk/nextjs/server";
+import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 
-export default clerkMiddleware();
+const isPublicRoute = createRouteMatcher([
+  "/api/telegram(.*)",
+]);
+
+export default clerkMiddleware(async (auth, req) => {
+  if (isPublicRoute(req)) {
+    return;
+  }
+});
 
 export const config = {
   matcher: [
     // Skip Next.js internals and static files
     "/((?!_next|.*\\..*).*)",
-    // Always protect API routes
+    // Protect API routes
     "/(api|trpc)(.*)",
   ],
 };
+
