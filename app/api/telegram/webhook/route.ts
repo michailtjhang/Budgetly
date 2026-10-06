@@ -39,7 +39,7 @@ interface GeminiReceiptResult {
 }
 
 interface GeminiTextResult {
-    action?: "transfer" | "single" | "chat";
+    action?: "transfer" | "single" | "chat" | "history";
     amount?: number;
     adminFee?: number;
     fromAccount?: string;
@@ -48,6 +48,7 @@ interface GeminiTextResult {
     account?: string;
     category?: string;
     description?: string;
+    date?: string;
     reply?: string;
 }
 
@@ -57,6 +58,15 @@ function formatRupiah(amount: number): string {
         currency: "IDR",
         maximumFractionDigits: 0
     }).format(amount);
+}
+
+function formatTanggalIndo(d: Date): string {
+    const days = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
+    const months = [
+        "Januari", "Februari", "Maret", "April", "Mei", "Juni",
+        "Juli", "Agustus", "September", "Oktober", "November", "Desember"
+    ];
+    return `${days[d.getDay()]}, ${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;
 }
 
 async function sendTelegramMessage(chatId: number | string, text: string, replyToMessageId?: number) {
@@ -91,6 +101,38 @@ async function sendChatAction(chatId: number | string, action: string = "typing"
     } catch (err) {
         console.error("[Telegram] Error sending action:", err);
     }
+}
+
+async function handleShowHistory(chatId: number | string, messageId?: number) {
+    await sendChatAction(chatId, "typing");
+    const transactions = await db.transaction.findMany({
+        where: { userId: CLERK_USER_ID },
+        orderBy: { date: "desc" },
+        take: 10,
+    });
+
+    if (transactions.length === 0) {
+        await sendTelegramMessage(
+            chatId,
+            "📜 <b>Riwayat Transaksi</b>\n\nBelum ada transaksi yang tercatat di Budgetly.",
+            messageId
+        );
+        return;
+    }
+
+    let msg = `📜 <b>10 Riwayat Transaksi Terakhir:</b>\n\n`;
+    for (const t of transactions) {
+        const isIncome = t.type === "income";
+        const symbol = isIncome ? "🟢" : "🔴";
+        const sign = isIncome ? "+" : "-";
+        const tDate = new Date(t.date);
+        const dateStr = `${tDate.getDate().toString().padStart(2, "0")}/${(tDate.getMonth() + 1).toString().padStart(2, "0")}/${tDate.getFullYear()}`;
+
+        msg += `${symbol} <b>${sign}${formatRupiah(t.amount)}</b> • ${t.description}\n`;
+        msg += `   📅 <i>${dateStr}</i> | 🏦 <i>${t.account || "Lainnya"}</i> | 📁 <i>${t.category || "Lainnya"}</i>\n\n`;
+    }
+
+    await sendTelegramMessage(chatId, msg, messageId);
 }
 
 // Endpoint GET untuk mengecek status webhook via browser
@@ -160,11 +202,18 @@ Saya siap membantu mencatat transaksi keuangan Anda secara otomatis.
 • <i>"bensin 35k tunai"</i>
 • <i>"gaji bulanan 10jt masuk mandiri"</i>
 
-3️⃣ <b>Kirim Foto Struk / QRIS / Bukti Transfer:</b>
+3️⃣ <b>Bisa Catat Tanggal Lampau (Kemarin, Lusa, dll):</b>
+• <i>"kemarin saya makan bakso 25rb pake bca"</i>
+• <i>"kemarin keluar 50rb buat bensin"</i>
+• <i>"2 hari lalu tf ke gopay dari bca 100rb"</i>
+👉 <i>(Tanggal otomatis disesuaikan ke kemarin / hari lampau!)</i>
+
+4️⃣ <b>Kirim Foto Struk / QRIS / Bukti Transfer:</b>
 • Langsung kirim foto screenshot QRIS atau bukti transfer!
 • AI otomatis mendeteksi nominal, merchant, dan rekening pengeluaran.
 
 📊 <b>Perintah Tambahan:</b>
+• /riwayat - Lihat 10 transaksi terakhir
 • /saldo - Cek rincian saldo semua rekening & e-wallet
 • /rekap - Ringkasan pemasukan & pengeluaran bulan ini`;
 
@@ -172,7 +221,13 @@ Saya siap membantu mencatat transaksi keuangan Anda secara otomatis.
             return NextResponse.json({ ok: true });
         }
 
-        // 2. Handle Command: /saldo
+        // 2. Handle Command: /riwayat
+        if (text === "/riwayat" || text === "/history") {
+            await handleShowHistory(chatId, messageId);
+            return NextResponse.json({ ok: true });
+        }
+
+        // 3. Handle Command: /saldo
         if (text === "/saldo") {
             await sendChatAction(chatId, "typing");
             const transactions = await db.transaction.findMany({
@@ -216,7 +271,7 @@ Saya siap membantu mencatat transaksi keuangan Anda secara otomatis.
             return NextResponse.json({ ok: true });
         }
 
-        // 3. Handle Command: /rekap
+        // 4. Handle Command: /rekap
         if (text === "/rekap") {
             await sendChatAction(chatId, "typing");
             const now = new Date();
@@ -253,7 +308,7 @@ Saya siap membantu mencatat transaksi keuangan Anda secara otomatis.
             return NextResponse.json({ ok: true });
         }
 
-        // 4. Handle Foto (Screenshot QRIS / Bukti Transfer / Struk)
+        // 5. Handle Foto (Screenshot QRIS / Bukti Transfer / Struk)
         if (photo && photo.length > 0) {
             await sendChatAction(chatId, "typing");
             const highestResPhoto = photo[photo.length - 1];
@@ -381,7 +436,7 @@ KEMBALIKAN HANYA JSON MURNI TANPA BACKTICK, TANPA MARKDOWN.`;
                     `📤 <b>Keluar:</b> <code>${formatRupiah(amount)}</code> (${fromAcc})\n` +
                     `📥 <b>Masuk:</b> <code>${formatRupiah(amount)}</code> (${toAcc})\n` +
                     `📁 <b>Kategori:</b> Top Up & Tabungan\n` +
-                    `📅 <b>Tanggal:</b> ${transDate.toISOString().split("T")[0]}`;
+                    `📅 <b>Tanggal:</b> ${formatTanggalIndo(transDate)}`;
 
                 await sendTelegramMessage(chatId, replyMsg, messageId);
                 return NextResponse.json({ ok: true });
@@ -410,16 +465,19 @@ KEMBALIKAN HANYA JSON MURNI TANPA BACKTICK, TANPA MARKDOWN.`;
                 `💰 <b>Nominal:</b> <code>${formatRupiah(amount)}</code>\n` +
                 `🏦 <b>Akun:</b> ${account}\n` +
                 `📁 <b>Kategori:</b> ${category}\n` +
-                `📅 <b>Tanggal:</b> ${transDate.toISOString().split("T")[0]}`;
+                `📅 <b>Tanggal:</b> ${formatTanggalIndo(transDate)}`;
 
             await sendTelegramMessage(chatId, replyMsg, messageId);
             return NextResponse.json({ ok: true });
         }
 
-        // 5. Handle Chat Teks (NLP Gemini)
+        // 6. Handle Chat Teks (NLP Gemini)
         if (text) {
             await sendChatAction(chatId, "typing");
-            const todayStr = new Date().toISOString().split("T")[0];
+            const now = new Date();
+            const todayStr = now.toISOString().split("T")[0];
+            const daysIndo = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
+            const currentDayName = daysIndo[now.getDay()];
 
             const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
             const prompt = `Kamu adalah asisten pencatat keuangan cerdas untuk aplikasi Budgetly.
@@ -427,11 +485,28 @@ Tugasmu adalah menganalisis pesan pengguna: "${text}"
 
 Daftar Akun yang Dikenal: ${ACCOUNT_OPTIONS.join(", ")}
 Daftar Kategori: ${CATEGORY_OPTIONS.join(", ")}
-Tanggal Hari Ini: ${todayStr}
+Hari Ini: ${currentDayName}, ${todayStr}
+
+ATURAN TANGGAL & WAKTU:
+- Analisis apakah pengguna menyebutkan keterangan waktu:
+  - "kemarin": hitung tanggal H-1 dari hari ini.
+  - "kemarin lusa" / "2 hari lalu": hitung tanggal H-2 dari hari ini.
+  - "3 hari lalu": hitung tanggal H-3 dari hari ini.
+  - Jika menyebut hari tertentu (misal "senin kemarin", "minggu lalu"), hitung tanggal hari tersebut yang paling dekat ke belakang.
+  - Jika menyebut tanggal spesifik (misal "tanggal 2", "tgl 4 kemarin"), sesuaikan dengan bulan dan tahun saat ini (${todayStr}).
+  - Jika tidak ada keterangan waktu: gunakan tanggal hari ini: "${todayStr}".
+- Masukkan ke field "date" dalam format "YYYY-MM-DD".
 
 KEMUNGKINAN INTENT:
-1. "transfer": Pemindahan dana, top-up, atau tf antar akun/rekening/dompet digital.
-   Contoh: "tf ke gopay dari jago 50rb", "transfer dari bca ke jago 100k", "top up shopeepay 20rb pake bca admin 1000", "pindah dana 500rb dari mandiri ke bibit"
+1. "history": Jika user meminta melihat riwayat, transaksi terakhir, catatan keuangan lalu.
+   Contoh: "lihat riwayat", "riwayat terakhir", "history transaksi", "rekap transaksi terakhir", "transaksi kemaren kemaren"
+   Format JSON:
+   {
+     "action": "history"
+   }
+
+2. "transfer": Pemindahan dana, top-up, atau tf antar akun/rekening/dompet digital.
+   Contoh: "tf ke gopay dari jago 50rb", "kemarin transfer dari bca ke jago 100k", "top up shopeepay 20rb pake bca admin 1000", "pindah dana 500rb dari mandiri ke bibit"
    Format JSON:
    {
      "action": "transfer",
@@ -439,11 +514,12 @@ KEMUNGKINAN INTENT:
      "fromAccount": string (pilih akun sumber dari Daftar Akun yang Dikenal, misal "Jago"),
      "toAccount": string (pilih akun tujuan dari Daftar Akun yang Dikenal, misal "GoPay"),
      "adminFee": number (jika ada biaya admin, jika tidak ada isi 0),
-     "description": string (keterangan singkat, misal "Transfer Jago ke GoPay")
+     "description": string (keterangan singkat, misal "Transfer Jago ke GoPay"),
+     "date": string (format YYYY-MM-DD)
    }
 
-2. "single": Catatan pengeluaran atau pemasukan biasa.
-   Contoh: "makan bakso 25rb pake gopay", "bensin 35k tunai", "gaji 10jt masuk mandiri", "beli kopi 20rb", "dapet transferan 150rb di bca"
+3. "single": Catatan pengeluaran atau pemasukan biasa.
+   Contoh: "kemarin saya makan bakso 25rb pake gopay", "kemarin keluar 50rb buat bensin", "2 hari lalu beli pulsa 50k bca", "tgl 3 dapet gaji 10jt masuk mandiri"
    Format JSON:
    {
      "action": "single",
@@ -451,10 +527,11 @@ KEMUNGKINAN INTENT:
      "amount": number (angka nominal murni),
      "account": string (pilih dari Daftar Akun yang Dikenal, jika tidak disebutkan gunakan "Uang Tunai" atau "Lainnya"),
      "category": string (pilih kategori paling cocok dari Daftar Kategori),
-     "description": string (keterangan pengeluaran/pemasukan)
+     "description": string (keterangan pengeluaran/pemasukan),
+     "date": string (format YYYY-MM-DD)
    }
 
-3. "chat": Jika pesan hanya sapaan atau percakapan biasa dan bukan transaksi keuangan.
+4. "chat": Jika pesan hanya sapaan atau percakapan biasa dan bukan transaksi keuangan.
    Format JSON:
    {
      "action": "chat",
@@ -483,7 +560,13 @@ KEMBALIKAN HANYA JSON MURNI TANPA BACKTICK, TANPA MARKDOWN.`;
             try {
                 parsed = JSON.parse(cleanedJson) as GeminiTextResult;
             } catch {
-                await sendTelegramMessage(chatId, "⚠️ Maaf, saya tidak dapat memahami format transaksi tersebut. Coba contoh: <i>'tf ke gopay dari jago 50rb'</i> atau <i>'makan bakso 25rb pake bca'</i>", messageId);
+                await sendTelegramMessage(chatId, "⚠️ Maaf, saya tidak dapat memahami format transaksi tersebut. Coba contoh: <i>'kemarin makan bakso 25rb pake bca'</i> atau <i>'tf ke gopay dari jago 50rb'</i>", messageId);
+                return NextResponse.json({ ok: true });
+            }
+
+            // Jika action == "history"
+            if (parsed.action === "history") {
+                await handleShowHistory(chatId, messageId);
                 return NextResponse.json({ ok: true });
             }
 
@@ -492,6 +575,9 @@ KEMBALIKAN HANYA JSON MURNI TANPA BACKTICK, TANPA MARKDOWN.`;
                 await sendTelegramMessage(chatId, parsed.reply || "Halo! Ada yang bisa saya bantu catat hari ini?", messageId);
                 return NextResponse.json({ ok: true });
             }
+
+            // Tanggal transaksi (kemarin, lusa, atau hari ini)
+            const transDate = parsed.date ? new Date(parsed.date) : new Date();
 
             // Jika action == "transfer"
             if (parsed.action === "transfer") {
@@ -514,6 +600,7 @@ KEMBALIKAN HANYA JSON MURNI TANPA BACKTICK, TANPA MARKDOWN.`;
                             type: "expense",
                             account: fromAccount,
                             category: "Top Up & Tabungan",
+                            date: transDate,
                             userId: CLERK_USER_ID,
                         },
                     }),
@@ -524,6 +611,7 @@ KEMBALIKAN HANYA JSON MURNI TANPA BACKTICK, TANPA MARKDOWN.`;
                             type: "income",
                             account: toAccount,
                             category: "Top Up & Tabungan",
+                            date: transDate,
                             userId: CLERK_USER_ID,
                         },
                     }),
@@ -539,6 +627,7 @@ KEMBALIKAN HANYA JSON MURNI TANPA BACKTICK, TANPA MARKDOWN.`;
                                 type: "expense",
                                 account: fromAccount,
                                 category: "Biaya Admin & Pajak",
+                                date: transDate,
                                 userId: CLERK_USER_ID,
                             },
                         })
@@ -554,7 +643,8 @@ KEMBALIKAN HANYA JSON MURNI TANPA BACKTICK, TANPA MARKDOWN.`;
                 if (adminFee > 0) {
                     replyMsg += `💸 <b>Biaya Admin:</b> <code>${formatRupiah(adminFee)}</code>\n`;
                 }
-                replyMsg += `📁 <b>Kategori:</b> Top Up & Tabungan\n\n` +
+                replyMsg += `📁 <b>Kategori:</b> Top Up & Tabungan\n` +
+                    `📅 <b>Tanggal:</b> ${formatTanggalIndo(transDate)}\n\n` +
                     `💡 <i>Saldo di ${fromAccount} otomatis berkurang dan di ${toAccount} bertambah.</i>`;
 
                 await sendTelegramMessage(chatId, replyMsg, messageId);
@@ -581,6 +671,7 @@ KEMBALIKAN HANYA JSON MURNI TANPA BACKTICK, TANPA MARKDOWN.`;
                         type,
                         account,
                         category,
+                        date: transDate,
                         userId: CLERK_USER_ID,
                     },
                 });
@@ -589,7 +680,8 @@ KEMBALIKAN HANYA JSON MURNI TANPA BACKTICK, TANPA MARKDOWN.`;
                     `📝 <b>Keterangan:</b> ${description}\n` +
                     `💰 <b>Nominal:</b> <code>${formatRupiah(amount)}</code>\n` +
                     `🏦 <b>Akun:</b> ${account}\n` +
-                    `📁 <b>Kategori:</b> ${category}`;
+                    `📁 <b>Kategori:</b> ${category}\n` +
+                    `📅 <b>Tanggal:</b> ${formatTanggalIndo(transDate)}`;
 
                 await sendTelegramMessage(chatId, replyMsg, messageId);
                 return NextResponse.json({ ok: true });
