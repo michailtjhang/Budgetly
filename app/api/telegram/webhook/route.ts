@@ -52,6 +52,36 @@ interface GeminiTextResult {
     reply?: string;
 }
 
+type GeminiPart = string | { inlineData: { data: string; mimeType: string } };
+
+// Helper dengan fallback otomatis untuk menghindari error model 404 / deprecated
+async function generateGeminiContent(contents: GeminiPart | GeminiPart[]): Promise<string> {
+    const modelsToTry = [
+        "gemini-2.0-flash",
+        "gemini-2.5-flash",
+        "gemini-1.5-flash-latest",
+        "gemini-1.5-flash",
+        "gemini-pro"
+    ];
+
+    let lastError: unknown = null;
+    for (const modelName of modelsToTry) {
+        try {
+            const model = genAI.getGenerativeModel({ model: modelName });
+            const result = await model.generateContent(contents);
+            return result.response.text().trim();
+        } catch (err: unknown) {
+            lastError = err;
+            const errMsg = err instanceof Error ? err.message : String(err);
+            if (errMsg.includes("404") || errMsg.includes("not found") || errMsg.includes("is not supported")) {
+                continue;
+            }
+            throw err;
+        }
+    }
+    throw lastError || new Error("Tidak ada model Gemini yang tersedia.");
+}
+
 function formatRupiah(amount: number): string {
     return new Intl.NumberFormat("id-ID", {
         style: "currency",
@@ -327,8 +357,6 @@ Saya siap membantu mencatat transaksi keuangan Anda secara otomatis.
             const imageBuffer = await imageBlobRes.arrayBuffer();
             const base64Image = Buffer.from(imageBuffer).toString("base64");
 
-            // Analisis gambar dengan Gemini AI
-            const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
             const prompt = `Kamu adalah asisten keuangan pintar Budgetly. Analisis gambar bukti transaksi / QRIS / struk transfer / nota belanja ini.
 
 Daftar Akun yang Dikenal: ${ACCOUNT_OPTIONS.join(", ")}
@@ -358,7 +386,7 @@ KEMBALIKAN HANYA JSON MURNI TANPA BACKTICK, TANPA MARKDOWN.`;
 
             let geminiText = "";
             try {
-                const geminiRes = await model.generateContent([
+                geminiText = await generateGeminiContent([
                     {
                         inlineData: {
                             data: base64Image,
@@ -367,7 +395,6 @@ KEMBALIKAN HANYA JSON MURNI TANPA BACKTICK, TANPA MARKDOWN.`;
                     },
                     prompt,
                 ]);
-                geminiText = geminiRes.response.text().trim();
             } catch (err: unknown) {
                 console.error("[Telegram] Gemini Vision Error:", err);
                 const errMsg = err instanceof Error ? err.message : "Error";
@@ -479,7 +506,6 @@ KEMBALIKAN HANYA JSON MURNI TANPA BACKTICK, TANPA MARKDOWN.`;
             const daysIndo = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
             const currentDayName = daysIndo[now.getDay()];
 
-            const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
             const prompt = `Kamu adalah asisten pencatat keuangan cerdas untuk aplikasi Budgetly.
 Tugasmu adalah menganalisis pesan pengguna: "${text}"
 
@@ -542,8 +568,7 @@ KEMBALIKAN HANYA JSON MURNI TANPA BACKTICK, TANPA MARKDOWN.`;
 
             let geminiReply = "";
             try {
-                const result = await model.generateContent(prompt);
-                geminiReply = result.response.text().trim();
+                geminiReply = await generateGeminiContent(prompt);
             } catch (err: unknown) {
                 console.error("[Telegram] Gemini Text Error:", err);
                 const errMsg = err instanceof Error ? err.message : "Error";
