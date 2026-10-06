@@ -52,10 +52,12 @@ interface GeminiTextResult {
     reply?: string;
 }
 
-type GeminiPart = string | { inlineData: { data: string; mimeType: string } };
+type GenerateContentInput = Parameters<
+    ReturnType<GoogleGenerativeAI["getGenerativeModel"]>["generateContent"]
+>[0];
 
 // Helper dengan fallback otomatis untuk menghindari error model 404 / deprecated
-async function generateGeminiContent(contents: GeminiPart | GeminiPart[]): Promise<string> {
+async function generateGeminiContent(contents: GenerateContentInput): Promise<string> {
     const modelsToTry = [
         "gemini-2.0-flash",
         "gemini-2.5-flash",
