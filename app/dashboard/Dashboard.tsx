@@ -20,8 +20,6 @@ import {
     Check,
     Plus,
     Tag,
-    Filter,
-    FilterX,
     Coffee,
     Camera,
     ImageIcon,

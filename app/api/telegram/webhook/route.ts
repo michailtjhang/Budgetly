@@ -26,6 +26,31 @@ const CATEGORY_OPTIONS = [
     "Penghasilan", "Bunga", "Lainnya"
 ];
 
+interface GeminiReceiptResult {
+    error?: string;
+    isTransfer?: boolean;
+    type?: "expense" | "income";
+    amount?: number;
+    description?: string;
+    account?: string;
+    toAccount?: string;
+    category?: string;
+    date?: string;
+}
+
+interface GeminiTextResult {
+    action?: "transfer" | "single" | "chat";
+    amount?: number;
+    adminFee?: number;
+    fromAccount?: string;
+    toAccount?: string;
+    type?: "expense" | "income";
+    account?: string;
+    category?: string;
+    description?: string;
+    reply?: string;
+}
+
 function formatRupiah(amount: number): string {
     return new Intl.NumberFormat("id-ID", {
         style: "currency",
@@ -167,7 +192,7 @@ Saya siap membantu mencatat transaksi keuangan Anda secara otomatis.
             }, {} as Record<string, number>);
 
             const nonZeroAccounts = Object.entries(balances)
-                .filter(([_, bal]) => bal !== 0)
+                .filter(([, bal]) => bal !== 0)
                 .sort((a, b) => b[1] - a[1]);
 
             const totalBalance = Object.values(balances).reduce((sum, b) => sum + b, 0);
@@ -288,9 +313,10 @@ KEMBALIKAN HANYA JSON MURNI TANPA BACKTICK, TANPA MARKDOWN.`;
                     prompt,
                 ]);
                 geminiText = geminiRes.response.text().trim();
-            } catch (err: any) {
+            } catch (err: unknown) {
                 console.error("[Telegram] Gemini Vision Error:", err);
-                await sendTelegramMessage(chatId, `❌ Gagal memproses gambar dengan AI: ${err.message || "Error"}`, messageId);
+                const errMsg = err instanceof Error ? err.message : "Error";
+                await sendTelegramMessage(chatId, `❌ Gagal memproses gambar dengan AI: ${errMsg}`, messageId);
                 return NextResponse.json({ ok: true });
             }
 
@@ -300,10 +326,10 @@ KEMBALIKAN HANYA JSON MURNI TANPA BACKTICK, TANPA MARKDOWN.`;
                 cleanedJson = cleanedJson.replace(/```(?:json)?\n?/g, "").replace(/```$/g, "").trim();
             }
 
-            let parsedData: any = {};
+            let parsedData: GeminiReceiptResult = {};
             try {
-                parsedData = JSON.parse(cleanedJson);
-            } catch (e) {
+                parsedData = JSON.parse(cleanedJson) as GeminiReceiptResult;
+            } catch {
                 await sendTelegramMessage(chatId, "⚠️ Gambar tidak terbaca dengan jelas sebagai bukti transaksi.", messageId);
                 return NextResponse.json({ ok: true });
             }
@@ -322,8 +348,8 @@ KEMBALIKAN HANYA JSON MURNI TANPA BACKTICK, TANPA MARKDOWN.`;
             }
 
             // Jika terdeteksi transfer antar akun sendiri
-            if (parsedData.isTransfer && parsedData.fromAccount && parsedData.toAccount) {
-                const fromAcc = ACCOUNT_OPTIONS.includes(parsedData.fromAccount) ? parsedData.fromAccount : "Lainnya";
+            if (parsedData.isTransfer && parsedData.account && parsedData.toAccount) {
+                const fromAcc = ACCOUNT_OPTIONS.includes(parsedData.account) ? parsedData.account : "Lainnya";
                 const toAcc = ACCOUNT_OPTIONS.includes(parsedData.toAccount) ? parsedData.toAccount : "Lainnya";
 
                 await db.$transaction([
@@ -363,8 +389,8 @@ KEMBALIKAN HANYA JSON MURNI TANPA BACKTICK, TANPA MARKDOWN.`;
 
             // Transaksi pengeluaran/pemasukan biasa (misal QRIS belanja)
             const type = parsedData.type === "income" ? "income" : "expense";
-            const account = ACCOUNT_OPTIONS.includes(parsedData.account) ? parsedData.account : (parsedData.account || "Lainnya");
-            const category = CATEGORY_OPTIONS.includes(parsedData.category) ? parsedData.category : "Lainnya";
+            const account = parsedData.account && ACCOUNT_OPTIONS.includes(parsedData.account) ? parsedData.account : (parsedData.account || "Lainnya");
+            const category = parsedData.category && CATEGORY_OPTIONS.includes(parsedData.category) ? parsedData.category : "Lainnya";
             const description = parsedData.description || (type === "expense" ? "Pembayaran QRIS" : "Pemasukan");
 
             await db.transaction.create({
@@ -441,9 +467,10 @@ KEMBALIKAN HANYA JSON MURNI TANPA BACKTICK, TANPA MARKDOWN.`;
             try {
                 const result = await model.generateContent(prompt);
                 geminiReply = result.response.text().trim();
-            } catch (err: any) {
+            } catch (err: unknown) {
                 console.error("[Telegram] Gemini Text Error:", err);
-                await sendTelegramMessage(chatId, `❌ Gagal memproses pesan: ${err.message || "Error"}`, messageId);
+                const errMsg = err instanceof Error ? err.message : "Error";
+                await sendTelegramMessage(chatId, `❌ Gagal memproses pesan: ${errMsg}`, messageId);
                 return NextResponse.json({ ok: true });
             }
 
@@ -452,10 +479,10 @@ KEMBALIKAN HANYA JSON MURNI TANPA BACKTICK, TANPA MARKDOWN.`;
                 cleanedJson = cleanedJson.replace(/```(?:json)?\n?/g, "").replace(/```$/g, "").trim();
             }
 
-            let parsed: any = {};
+            let parsed: GeminiTextResult = {};
             try {
-                parsed = JSON.parse(cleanedJson);
-            } catch (e) {
+                parsed = JSON.parse(cleanedJson) as GeminiTextResult;
+            } catch {
                 await sendTelegramMessage(chatId, "⚠️ Maaf, saya tidak dapat memahami format transaksi tersebut. Coba contoh: <i>'tf ke gopay dari jago 50rb'</i> atau <i>'makan bakso 25rb pake bca'</i>", messageId);
                 return NextResponse.json({ ok: true });
             }
@@ -470,8 +497,8 @@ KEMBALIKAN HANYA JSON MURNI TANPA BACKTICK, TANPA MARKDOWN.`;
             if (parsed.action === "transfer") {
                 const amount = Number(parsed.amount) || 0;
                 const adminFee = Number(parsed.adminFee) || 0;
-                const fromAccount = ACCOUNT_OPTIONS.includes(parsed.fromAccount) ? parsed.fromAccount : (parsed.fromAccount || "Lainnya");
-                const toAccount = ACCOUNT_OPTIONS.includes(parsed.toAccount) ? parsed.toAccount : (parsed.toAccount || "Lainnya");
+                const fromAccount = parsed.fromAccount && ACCOUNT_OPTIONS.includes(parsed.fromAccount) ? parsed.fromAccount : (parsed.fromAccount || "Lainnya");
+                const toAccount = parsed.toAccount && ACCOUNT_OPTIONS.includes(parsed.toAccount) ? parsed.toAccount : (parsed.toAccount || "Lainnya");
 
                 if (amount <= 0) {
                     await sendTelegramMessage(chatId, "⚠️ Nominal transfer tidak boleh 0.", messageId);
@@ -479,7 +506,7 @@ KEMBALIKAN HANYA JSON MURNI TANPA BACKTICK, TANPA MARKDOWN.`;
                 }
 
                 // Buat 2 transaksi (expense di akun pengirim, income di akun penerima)
-                const dbOps: any[] = [
+                const transferOps = [
                     db.transaction.create({
                         data: {
                             description: parsed.description || `Transfer ke ${toAccount}`,
@@ -504,7 +531,7 @@ KEMBALIKAN HANYA JSON MURNI TANPA BACKTICK, TANPA MARKDOWN.`;
 
                 // Tambahkan biaya admin jika ada
                 if (adminFee > 0) {
-                    dbOps.push(
+                    transferOps.push(
                         db.transaction.create({
                             data: {
                                 description: `Biaya Admin Transfer ke ${toAccount}`,
@@ -518,7 +545,7 @@ KEMBALIKAN HANYA JSON MURNI TANPA BACKTICK, TANPA MARKDOWN.`;
                     );
                 }
 
-                await db.$transaction(dbOps);
+                await db.$transaction(transferOps);
 
                 let replyMsg = `✅ <b>Transfer Berhasil Dicatat!</b>\n\n` +
                     `📤 <b>Keluar:</b> <code>${formatRupiah(amount)}</code> dari <b>${fromAccount}</b>\n` +
@@ -543,8 +570,8 @@ KEMBALIKAN HANYA JSON MURNI TANPA BACKTICK, TANPA MARKDOWN.`;
                 }
 
                 const type = parsed.type === "income" ? "income" : "expense";
-                const account = ACCOUNT_OPTIONS.includes(parsed.account) ? parsed.account : (parsed.account || "Uang Tunai");
-                const category = CATEGORY_OPTIONS.includes(parsed.category) ? parsed.category : "Lainnya";
+                const account = parsed.account && ACCOUNT_OPTIONS.includes(parsed.account) ? parsed.account : (parsed.account || "Uang Tunai");
+                const category = parsed.category && CATEGORY_OPTIONS.includes(parsed.category) ? parsed.category : "Lainnya";
                 const description = parsed.description || (type === "expense" ? "Pengeluaran" : "Pemasukan");
 
                 await db.transaction.create({
@@ -570,7 +597,7 @@ KEMBALIKAN HANYA JSON MURNI TANPA BACKTICK, TANPA MARKDOWN.`;
         }
 
         return NextResponse.json({ ok: true });
-    } catch (err: any) {
+    } catch (err: unknown) {
         console.error("[Telegram Webhook] Global Error:", err);
         return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
     }
