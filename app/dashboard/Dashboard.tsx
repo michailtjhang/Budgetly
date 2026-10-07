@@ -77,6 +77,7 @@ export default function Dashboard() {
     const [editingId, setEditingId] = useState<number | null>(null);
     const [accountSearch, setAccountSearch] = useState("");
     const [showAccountDropdown, setShowAccountDropdown] = useState(false);
+    const [categorySearch, setCategorySearch] = useState("");
     const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
 
     // Telegram Bot Linking State
