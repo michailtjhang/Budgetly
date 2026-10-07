@@ -135,10 +135,85 @@ async function sendChatAction(chatId: number | string, action: string = "typing"
     }
 }
 
-async function handleShowHistory(chatId: number | string, messageId?: number) {
+// Auto-create tabel TelegramUser jika belum ada (failsafe)
+async function ensureTelegramUserTable() {
+    try {
+        await db.$executeRawUnsafe(`
+            CREATE TABLE IF NOT EXISTS "TelegramUser" (
+                "id" SERIAL PRIMARY KEY,
+                "telegramId" TEXT NOT NULL UNIQUE,
+                "clerkUserId" TEXT NOT NULL,
+                "telegramUsername" TEXT,
+                "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+        `);
+    } catch {
+        // Ignored if table already exists
+    }
+}
+
+// Ambil Clerk User ID yang terhubung dengan akun Telegram ini
+async function getLinkedClerkUserId(telegramId: string): Promise<string | null> {
+    await ensureTelegramUserTable();
+    try {
+        const rows = await db.$queryRawUnsafe<Array<{ clerkUserId: string }>>(
+            `SELECT "clerkUserId" FROM "TelegramUser" WHERE "telegramId" = $1 LIMIT 1`,
+            telegramId
+        );
+        if (rows && rows.length > 0 && rows[0].clerkUserId) {
+            return rows[0].clerkUserId;
+        }
+    } catch (e) {
+        console.error("[Telegram] Error fetching TelegramUser:", e);
+    }
+
+    // Fallback khusus untuk akun owner yang diset via environment variable
+    if (ALLOWED_TELEGRAM_ID && telegramId === ALLOWED_TELEGRAM_ID.trim() && CLERK_USER_ID) {
+        return CLERK_USER_ID;
+    }
+
+    return null;
+}
+
+// Simpan / update hubungan Telegram ID ke Clerk User ID
+async function linkTelegramUser(telegramId: string, clerkUserId: string, username?: string): Promise<boolean> {
+    await ensureTelegramUserTable();
+    try {
+        await db.$executeRawUnsafe(
+            `INSERT INTO "TelegramUser" ("telegramId", "clerkUserId", "telegramUsername", "updatedAt")
+             VALUES ($1, $2, $3, CURRENT_TIMESTAMP)
+             ON CONFLICT ("telegramId")
+             DO UPDATE SET "clerkUserId" = EXCLUDED."clerkUserId", "telegramUsername" = EXCLUDED."telegramUsername", "updatedAt" = CURRENT_TIMESTAMP`,
+            telegramId,
+            clerkUserId,
+            username || null
+        );
+        return true;
+    } catch (e) {
+        console.error("[Telegram] Error linking TelegramUser:", e);
+        return false;
+    }
+}
+
+// Putuskan hubungan akun Telegram
+async function unlinkTelegramUser(telegramId: string): Promise<boolean> {
+    await ensureTelegramUserTable();
+    try {
+        await db.$executeRawUnsafe(
+            `DELETE FROM "TelegramUser" WHERE "telegramId" = $1`,
+            telegramId
+        );
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+async function handleShowHistory(chatId: number | string, clerkUserId: string, messageId?: number) {
     await sendChatAction(chatId, "typing");
     const transactions = await db.transaction.findMany({
-        where: { userId: CLERK_USER_ID },
+        where: { userId: clerkUserId },
         orderBy: { date: "desc" },
         take: 10,
     });
@@ -146,7 +221,7 @@ async function handleShowHistory(chatId: number | string, messageId?: number) {
     if (transactions.length === 0) {
         await sendTelegramMessage(
             chatId,
-            "📜 <b>Riwayat Transaksi</b>\n\nBelum ada transaksi yang tercatat di Budgetly.",
+            "📜 <b>Riwayat Transaksi</b>\n\nBelum ada transaksi yang tercatat di akun Budgetly Anda.",
             messageId
         );
         return;
@@ -175,7 +250,7 @@ export async function GET() {
         geminiConfigured: Boolean(GEMINI_API_KEY),
         allowedUserConfigured: Boolean(ALLOWED_TELEGRAM_ID),
         clerkUserConfigured: Boolean(CLERK_USER_ID),
-        message: "Budgetly Telegram Webhook is running."
+        message: "Budgetly Telegram Webhook is running with multi-user support."
     });
 }
 
@@ -190,36 +265,115 @@ export async function POST(req: NextRequest) {
 
         const chatId = message.chat.id;
         const senderId = message.from?.id ? String(message.from.id) : "";
+        const senderUsername = message.from?.username || message.from?.first_name || "";
         const messageId = message.message_id;
-
-        // Keamanan: Pastikan hanya pemilik yang diizinkan
-        if (ALLOWED_TELEGRAM_ID && senderId !== ALLOWED_TELEGRAM_ID.trim()) {
-            await sendTelegramMessage(
-                chatId,
-                `⛔ <b>Akses Ditolak</b>\n\nID Telegram Anda: <code>${senderId}</code>\nBot ini dikonfigurasi khusus untuk pemilik akun Budgetly. Masukkan ID ini ke <code>TELEGRAM_ALLOWED_USER_ID</code> jika ini adalah akun Anda.`,
-                messageId
-            );
-            return NextResponse.json({ ok: true });
-        }
-
-        if (!CLERK_USER_ID) {
-            await sendTelegramMessage(
-                chatId,
-                "⚠️ <b>Konfigurasi Belum Lengkap</b>\n\nVariabel <code>TELEGRAM_DEFAULT_CLERK_USER_ID</code> belum diset di Vercel.",
-                messageId
-            );
-            return NextResponse.json({ ok: true });
-        }
 
         const text = message.text?.trim() || "";
         const photo = message.photo;
         const caption = message.caption?.trim() || "";
 
-        // 1. Handle Command: /start atau /help
-        if (text === "/start" || text === "/help" || text === "/bantuan") {
-            const welcomeText = `👋 <b>Halo di Budgetly Assistant Bot!</b>
+        // 1. Cek apakah pesan adalah permintaan Login / Pairing Clerk ID
+        // Contoh: "/login user_2..." atau "/start user_2..." atau langsung kirim "user_2..."
+        const loginPrefixMatch = text.match(/^\/(?:login|start)\s+(user_[a-zA-Z0-9_-]+)/i);
+        const directClerkIdMatch = text.match(/^(user_[a-zA-Z0-9_-]{10,})$/i);
+        const pairingClerkId = loginPrefixMatch ? loginPrefixMatch[1] : (directClerkIdMatch ? directClerkIdMatch[1] : null);
 
-Saya siap membantu mencatat transaksi keuangan Anda secara otomatis.
+        if (pairingClerkId) {
+            await sendChatAction(chatId, "typing");
+            const success = await linkTelegramUser(senderId, pairingClerkId, senderUsername);
+
+            if (success) {
+                const welcomeMsg = `🎉 <b>Akun Berhasil Dihubungkan!</b>
+
+Halo <b>${senderUsername || "Teman"}</b>, akun Telegram Anda sekarang telah tersambung dengan Budgetly:
+👤 <b>User ID:</b> <code>${pairingClerkId}</code>
+
+Sekarang Anda bisa langsung mencatat keuangan:
+• <b>Catat Pengeluaran:</b> <i>"makan bakso 25rb pake bca"</i>
+• <b>Catat Pemasukan:</b> <i>"gaji 10jt masuk mandiri"</i>
+• <b>Transfer:</b> <i>"tf ke gopay dari jago 50rb"</i>
+• <b>Tanggal Lampau:</b> <i>"kemarin beli bensin 35k tunai"</i>
+• <b>Kirim Foto:</b> Screenshot struk / bukti transfer / QRIS
+• <b>Perintah:</b> /saldo, /rekap, atau /riwayat
+
+✨ <i>Akun Anda tersimpan otomatis. Anda tidak perlu memasukkan User ID lagi besok-besok!</i>`;
+                await sendTelegramMessage(chatId, welcomeMsg, messageId);
+                return NextResponse.json({ ok: true });
+            } else {
+                await sendTelegramMessage(chatId, "❌ Gagal menghubungkan akun. Silakan coba lagi sebentar lagi.", messageId);
+                return NextResponse.json({ ok: true });
+            }
+        }
+
+        // 2. Command /logout untuk memutuskan akun
+        if (text === "/logout") {
+            await unlinkTelegramUser(senderId);
+            await sendTelegramMessage(
+                chatId,
+                "👋 <b>Koneksi Akun Berhasil Diputuskan.</b>\n\nUntuk menghubungkan kembali atau mengganti akun, kirimkan User ID Budgetly Anda yang baru.",
+                messageId
+            );
+            return NextResponse.json({ ok: true });
+        }
+
+        // 3. Command /status atau /whoami
+        if (text === "/status" || text === "/whoami") {
+            const currentLinkedId = await getLinkedClerkUserId(senderId);
+            if (currentLinkedId) {
+                await sendTelegramMessage(
+                    chatId,
+                    `👤 <b>Status Akun Anda:</b>\n\n` +
+                    `• <b>Telegram ID:</b> <code>${senderId}</code>\n` +
+                    `• <b>Clerk User ID:</b> <code>${currentLinkedId}</code>\n` +
+                    `• <b>Status:</b> 🟢 Terhubung\n\n` +
+                    `<i>Ketik /logout jika ingin memutuskan atau berganti akun.</i>`,
+                    messageId
+                );
+            } else {
+                await sendTelegramMessage(
+                    chatId,
+                    `👤 <b>Status Akun Anda:</b>\n\n` +
+                    `• <b>Telegram ID:</b> <code>${senderId}</code>\n` +
+                    `• <b>Status:</b> 🔴 Belum terhubung\n\n` +
+                    `Silakan kirimkan User ID Budgetly Anda untuk mulai mencatat keuangan.`,
+                    messageId
+                );
+            }
+            return NextResponse.json({ ok: true });
+        }
+
+        // 4. Periksa apakah user sudah terhubung
+        const activeClerkUserId = await getLinkedClerkUserId(senderId);
+
+        // Jika BELUM terhubung, tampilkan panduan login
+        if (!activeClerkUserId) {
+            const needLoginMsg = `👋 <b>Selamat Datang di Budgetly Assistant Bot!</b>
+
+Bot ini dapat membantu Anda mencatat keuangan secara otomatis ke dashboard Budgetly Anda.
+
+🔐 <b>Langkah Mudah Menghubungkan Akun:</b>
+
+1️⃣ Buka website <b>Budgetly</b> di browser Anda.
+2️⃣ Di pojok kanan atas, klik tombol <b>"Bot Telegram"</b>.
+3️⃣ Klik tombol <b>"Salin ID"</b> untuk menyalin User ID Anda.
+4️⃣ Kirim User ID tersebut ke sini, contoh:
+<code>/login user_2xxxxxxxxxxxxxxx</code>
+<i>(atau langsung kirim User ID-nya saja)</i>
+
+✨ <i>Cukup hubungkan 1 kali saja. Akun Anda akan tersimpan secara permanen dan tidak perlu login lagi di masa mendatang!</i>`;
+
+            await sendTelegramMessage(chatId, needLoginMsg, messageId);
+            return NextResponse.json({ ok: true });
+        }
+
+        // ==========================================
+        // USER SUDAH TERHUBUNG (activeClerkUserId)
+        // ==========================================
+
+        // Handle Command: /start atau /help
+        if (text === "/start" || text === "/help" || text === "/bantuan") {
+            const welcomeText = `👋 <b>Halo! Akun Budgetly Anda Sudah Terhubung!</b>
+👤 ID: <code>${activeClerkUserId}</code>
 
 💡 <b>Cara Penggunaan:</b>
 
@@ -247,23 +401,25 @@ Saya siap membantu mencatat transaksi keuangan Anda secara otomatis.
 📊 <b>Perintah Tambahan:</b>
 • /riwayat - Lihat 10 transaksi terakhir
 • /saldo - Cek rincian saldo semua rekening & e-wallet
-• /rekap - Ringkasan pemasukan & pengeluaran bulan ini`;
+• /rekap - Ringkasan pemasukan & pengeluaran bulan ini
+• /status - Cek status akun Anda
+• /logout - Putuskan koneksi akun`;
 
             await sendTelegramMessage(chatId, welcomeText, messageId);
             return NextResponse.json({ ok: true });
         }
 
-        // 2. Handle Command: /riwayat
+        // Handle Command: /riwayat
         if (text === "/riwayat" || text === "/history") {
-            await handleShowHistory(chatId, messageId);
+            await handleShowHistory(chatId, activeClerkUserId, messageId);
             return NextResponse.json({ ok: true });
         }
 
-        // 3. Handle Command: /saldo
+        // Handle Command: /saldo
         if (text === "/saldo") {
             await sendChatAction(chatId, "typing");
             const transactions = await db.transaction.findMany({
-                where: { userId: CLERK_USER_ID },
+                where: { userId: activeClerkUserId },
             });
 
             const balances = transactions.reduce((acc, t) => {
@@ -287,7 +443,7 @@ Saya siap membantu mencatat transaksi keuangan Anda secara otomatis.
             if (nonZeroAccounts.length === 0) {
                 await sendTelegramMessage(
                     chatId,
-                    "🏦 <b>Saldo Akun Budgetly</b>\n\nBelum ada saldo transaksi yang tercatat.",
+                    "🏦 <b>Saldo Akun Budgetly</b>\n\nBelum ada saldo transaksi yang tercatat di akun Anda.",
                     messageId
                 );
                 return NextResponse.json({ ok: true });
@@ -303,7 +459,7 @@ Saya siap membantu mencatat transaksi keuangan Anda secara otomatis.
             return NextResponse.json({ ok: true });
         }
 
-        // 4. Handle Command: /rekap
+        // Handle Command: /rekap
         if (text === "/rekap") {
             await sendChatAction(chatId, "typing");
             const now = new Date();
@@ -311,7 +467,7 @@ Saya siap membantu mencatat transaksi keuangan Anda secara otomatis.
 
             const transactions = await db.transaction.findMany({
                 where: {
-                    userId: CLERK_USER_ID,
+                    userId: activeClerkUserId,
                     date: { gte: firstDayOfMonth },
                 },
             });
@@ -340,12 +496,11 @@ Saya siap membantu mencatat transaksi keuangan Anda secara otomatis.
             return NextResponse.json({ ok: true });
         }
 
-        // 5. Handle Foto (Screenshot QRIS / Bukti Transfer / Struk)
+        // Handle Foto (Screenshot QRIS / Bukti Transfer / Struk)
         if (photo && photo.length > 0) {
             await sendChatAction(chatId, "typing");
             const highestResPhoto = photo[photo.length - 1];
 
-            // Dapatkan URL file dari Telegram
             const fileRes = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/getFile?file_id=${highestResPhoto.file_id}`);
             const fileJson = await fileRes.json();
 
@@ -404,7 +559,6 @@ KEMBALIKAN HANYA JSON MURNI TANPA BACKTICK, TANPA MARKDOWN.`;
                 return NextResponse.json({ ok: true });
             }
 
-            // Clean markdown blocks if any
             let cleanedJson = geminiText;
             if (cleanedJson.startsWith("```")) {
                 cleanedJson = cleanedJson.replace(/```(?:json)?\n?/g, "").replace(/```$/g, "").trim();
@@ -445,7 +599,7 @@ KEMBALIKAN HANYA JSON MURNI TANPA BACKTICK, TANPA MARKDOWN.`;
                             account: fromAcc,
                             category: "Top Up & Tabungan",
                             date: transDate,
-                            userId: CLERK_USER_ID,
+                            userId: activeClerkUserId,
                         },
                     }),
                     db.transaction.create({
@@ -456,7 +610,7 @@ KEMBALIKAN HANYA JSON MURNI TANPA BACKTICK, TANPA MARKDOWN.`;
                             account: toAcc,
                             category: "Top Up & Tabungan",
                             date: transDate,
-                            userId: CLERK_USER_ID,
+                            userId: activeClerkUserId,
                         },
                     }),
                 ]);
@@ -485,7 +639,7 @@ KEMBALIKAN HANYA JSON MURNI TANPA BACKTICK, TANPA MARKDOWN.`;
                     account,
                     category,
                     date: transDate,
-                    userId: CLERK_USER_ID,
+                    userId: activeClerkUserId,
                 },
             });
 
@@ -500,7 +654,7 @@ KEMBALIKAN HANYA JSON MURNI TANPA BACKTICK, TANPA MARKDOWN.`;
             return NextResponse.json({ ok: true });
         }
 
-        // 6. Handle Chat Teks (NLP Gemini)
+        // Handle Chat Teks (NLP Gemini)
         if (text) {
             await sendChatAction(chatId, "typing");
             const now = new Date();
@@ -593,7 +747,7 @@ KEMBALIKAN HANYA JSON MURNI TANPA BACKTICK, TANPA MARKDOWN.`;
 
             // Jika action == "history"
             if (parsed.action === "history") {
-                await handleShowHistory(chatId, messageId);
+                await handleShowHistory(chatId, activeClerkUserId, messageId);
                 return NextResponse.json({ ok: true });
             }
 
@@ -603,7 +757,6 @@ KEMBALIKAN HANYA JSON MURNI TANPA BACKTICK, TANPA MARKDOWN.`;
                 return NextResponse.json({ ok: true });
             }
 
-            // Tanggal transaksi (kemarin, lusa, atau hari ini)
             const transDate = parsed.date ? new Date(parsed.date) : new Date();
 
             // Jika action == "transfer"
@@ -618,7 +771,6 @@ KEMBALIKAN HANYA JSON MURNI TANPA BACKTICK, TANPA MARKDOWN.`;
                     return NextResponse.json({ ok: true });
                 }
 
-                // Buat 2 transaksi (expense di akun pengirim, income di akun penerima)
                 const transferOps = [
                     db.transaction.create({
                         data: {
@@ -628,7 +780,7 @@ KEMBALIKAN HANYA JSON MURNI TANPA BACKTICK, TANPA MARKDOWN.`;
                             account: fromAccount,
                             category: "Top Up & Tabungan",
                             date: transDate,
-                            userId: CLERK_USER_ID,
+                            userId: activeClerkUserId,
                         },
                     }),
                     db.transaction.create({
@@ -639,12 +791,11 @@ KEMBALIKAN HANYA JSON MURNI TANPA BACKTICK, TANPA MARKDOWN.`;
                             account: toAccount,
                             category: "Top Up & Tabungan",
                             date: transDate,
-                            userId: CLERK_USER_ID,
+                            userId: activeClerkUserId,
                         },
                     }),
                 ];
 
-                // Tambahkan biaya admin jika ada
                 if (adminFee > 0) {
                     transferOps.push(
                         db.transaction.create({
@@ -655,7 +806,7 @@ KEMBALIKAN HANYA JSON MURNI TANPA BACKTICK, TANPA MARKDOWN.`;
                                 account: fromAccount,
                                 category: "Biaya Admin & Pajak",
                                 date: transDate,
-                                userId: CLERK_USER_ID,
+                                userId: activeClerkUserId,
                             },
                         })
                     );
@@ -699,7 +850,7 @@ KEMBALIKAN HANYA JSON MURNI TANPA BACKTICK, TANPA MARKDOWN.`;
                         account,
                         category,
                         date: transDate,
-                        userId: CLERK_USER_ID,
+                        userId: activeClerkUserId,
                     },
                 });
 

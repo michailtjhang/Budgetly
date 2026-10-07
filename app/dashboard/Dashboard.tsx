@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { UserButton } from "@clerk/nextjs";
+import { UserButton, useUser } from "@clerk/nextjs";
 import Image from "next/image";
 import {
     ArrowUpCircle,
@@ -26,7 +26,9 @@ import {
     ScanLine,
     X,
     Sparkles,
-    AlertCircle
+    AlertCircle,
+    Send,
+    Copy
 } from "lucide-react";
 import FinancialChart from "@/components/FinancialChart";
 
@@ -75,8 +77,12 @@ export default function Dashboard() {
     const [editingId, setEditingId] = useState<number | null>(null);
     const [accountSearch, setAccountSearch] = useState("");
     const [showAccountDropdown, setShowAccountDropdown] = useState(false);
-    const [categorySearch, setCategorySearch] = useState("");
     const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
+
+    // Telegram Bot Linking State
+    const { user } = useUser();
+    const [showTelegramModal, setShowTelegramModal] = useState(false);
+    const [copiedId, setCopiedId] = useState(false);
 
     // Filter State
     const [activeFilter, setActiveFilter] = useState<"all" | "income" | "expense">("all");
@@ -494,6 +500,16 @@ export default function Dashboard() {
                                 <Calendar className="w-4 h-4" />
                                 <span>{displayMonthLabel()}</span>
                                 <ChevronDown className={`w-3.5 h-3.5 transition-transform text-indigo-400 ${showMonthPicker ? "rotate-180" : ""}`} />
+                            </button>
+
+                            {/* Connect Telegram Bot Button */}
+                            <button
+                                onClick={() => setShowTelegramModal(true)}
+                                className="flex items-center gap-1.5 bg-sky-50 hover:bg-sky-100 border border-sky-200 text-sky-700 rounded-xl px-2.5 py-2 text-xs sm:text-sm font-semibold transition-all shadow-sm"
+                                title="Sambungkan Akun ke Bot Telegram"
+                            >
+                                <Send className="w-3.5 h-3.5 text-sky-500" />
+                                <span className="hidden md:inline">Bot Telegram</span>
                             </button>
 
                             <UserButton afterSignOutUrl="/" />
@@ -1335,6 +1351,86 @@ export default function Dashboard() {
                                     </ul>
                                 </div>
                             )}
+                        </div>
+                    </div>
+                </div>
+            {/* Telegram Bot Connect Modal */}
+            {showTelegramModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-in fade-in">
+                    <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full p-6 border border-gray-100 relative">
+                        <div className="flex items-center justify-between pb-4 border-b border-gray-100">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-2xl bg-sky-100 flex items-center justify-center text-sky-600 shadow-inner">
+                                    <Send className="w-5 h-5" />
+                                </div>
+                                <div>
+                                    <h3 className="font-bold text-gray-900 text-base">Sambungkan Bot Telegram</h3>
+                                    <p className="text-xs text-gray-500">Catat keuangan otomatis langsung via chat</p>
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => setShowTelegramModal(false)}
+                                className="p-1.5 rounded-xl text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+
+                        <div className="mt-5 space-y-4">
+                            <div>
+                                <label className="text-[11px] font-bold uppercase tracking-wider text-gray-400 block mb-1.5">
+                                    CLERK USER ID ANDA
+                                </label>
+                                <div className="flex items-center gap-2 bg-gray-50 p-2.5 rounded-2xl border border-gray-200">
+                                    <code className="text-xs font-mono text-gray-800 truncate flex-1 font-semibold pl-1">
+                                        {user?.id || "Memuat ID..."}
+                                    </code>
+                                    <button
+                                        onClick={() => {
+                                            if (user?.id) {
+                                                navigator.clipboard.writeText(user.id);
+                                                setCopiedId(true);
+                                                setTimeout(() => setCopiedId(false), 2000);
+                                            }
+                                        }}
+                                        className="px-3 py-1.5 text-xs font-semibold bg-white hover:bg-gray-100 border border-gray-200 rounded-xl text-gray-700 shadow-sm flex items-center gap-1.5 transition-all active:scale-95 shrink-0"
+                                    >
+                                        {copiedId ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                                        <span className={copiedId ? "text-emerald-600" : ""}>{copiedId ? "Tersalin!" : "Salin ID"}</span>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div className="bg-sky-50/80 p-4 rounded-2xl border border-sky-100 text-xs text-sky-950 space-y-2.5">
+                                <p className="font-bold text-sky-900 flex items-center gap-1.5">
+                                    <span>🤖</span> Cara Menghubungkan ke Bot:
+                                </p>
+                                <ol className="list-decimal list-inside space-y-1.5 text-sky-800 leading-relaxed">
+                                    <li>Klik tombol <b>Buka Bot di Telegram</b> di bawah ini.</li>
+                                    <li>Atau salin ID Anda di atas, buka <a href="https://t.me/tracker_budgetly_bot" target="_blank" rel="noopener noreferrer" className="underline font-bold text-sky-900">@tracker_budgetly_bot</a>, lalu kirimkan ID Anda ke bot.</li>
+                                </ol>
+                                <p className="text-[11px] text-sky-600 pt-1 border-t border-sky-100">
+                                    ✨ <i>Cukup hubungkan 1 kali. Akun tersimpan otomatis tanpa perlu login lagi!</i>
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="mt-6 flex flex-col sm:flex-row gap-2">
+                            <a
+                                href={user?.id ? `https://t.me/tracker_budgetly_bot?start=${user.id}` : "https://t.me/tracker_budgetly_bot"}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex-1 py-2.5 bg-sky-500 hover:bg-sky-600 text-white rounded-xl text-sm font-semibold transition-all shadow-sm flex items-center justify-center gap-2 text-center"
+                            >
+                                <Send className="w-4 h-4" />
+                                <span>Buka Bot di Telegram</span>
+                            </a>
+                            <button
+                                onClick={() => setShowTelegramModal(false)}
+                                className="py-2.5 px-5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-sm font-semibold transition-all"
+                            >
+                                Tutup
+                            </button>
                         </div>
                     </div>
                 </div>
