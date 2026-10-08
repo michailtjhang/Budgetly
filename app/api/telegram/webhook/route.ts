@@ -7,6 +7,7 @@ export const maxDuration = 60; // Izinkan durasi hingga 60s untuk pemrosesan AI 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const ALLOWED_TELEGRAM_ID = process.env.TELEGRAM_ALLOWED_USER_ID;
 const CLERK_USER_ID = process.env.TELEGRAM_DEFAULT_CLERK_USER_ID;
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
 const ACCOUNT_OPTIONS = [
     "BCA", "blu by BCA", "BRI", "BNI", "Mandiri", "BJB", "Permata",
