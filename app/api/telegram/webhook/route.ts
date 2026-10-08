@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { genAI, getAvailableGeminiModel, resetGeminiModelCache } from "@/lib/gemini";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
 export const maxDuration = 60; // Izinkan durasi hingga 60s untuk pemrosesan AI di serverless
 
