@@ -1,14 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { genAI, getAvailableGeminiModel, resetGeminiModelCache } from "@/lib/gemini";
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { generateGeminiContent } from "@/lib/gemini";
 
 export const maxDuration = 60; // Izinkan durasi hingga 60s untuk pemrosesan AI di serverless
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const ALLOWED_TELEGRAM_ID = process.env.TELEGRAM_ALLOWED_USER_ID;
 const CLERK_USER_ID = process.env.TELEGRAM_DEFAULT_CLERK_USER_ID;
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
 const ACCOUNT_OPTIONS = [
     "BCA", "blu by BCA", "BRI", "BNI", "Mandiri", "BJB", "Permata",
@@ -49,27 +47,6 @@ interface GeminiTextResult {
     description?: string;
     date?: string;
     reply?: string;
-}
-
-type GenerateContentInput = Parameters<
-    ReturnType<GoogleGenerativeAI["getGenerativeModel"]>["generateContent"]
->[0];
-
-async function generateGeminiContent(contents: GenerateContentInput): Promise<string> {
-    const modelName = await getAvailableGeminiModel();
-    try {
-        const model = genAI.getGenerativeModel({ model: modelName });
-        const result = await model.generateContent(contents);
-        return result.response.text().trim();
-    } catch (err: unknown) {
-        const errMsg = err instanceof Error ? err.message : String(err);
-        
-        // Jika 404, reset cache agar request berikutnya fetch list model ulang
-        if (errMsg.includes("404") || errMsg.includes("not found")) {
-            resetGeminiModelCache();
-        }
-        throw err;
-    }
 }
 
 function formatRupiah(amount: number): string {
@@ -675,21 +652,31 @@ KEMUNGKINAN INTENT:
      "action": "history"
    }
 
-2. "transfer": Pemindahan dana, top-up, atau tf antar akun/rekening/dompet digital.
-   Contoh: "tf ke gopay dari jago 50rb", "kemarin transfer dari bca ke jago 100k", "top up shopeepay 20rb pake bca admin 1000", "pindah dana 500rb dari mandiri ke bibit"
+2. "transfer": Pemindahan dana, top-up, setor tunai, tarik tunai, tukar uang, atau tf antar akun/rekening/dompet digital/uang tunai.
+   Contoh:
+   - "tf ke gopay dari jago 50rb" -> fromAccount: "Jago", toAccount: "GoPay"
+   - "kemarin transfer dari bca ke jago 100k" -> fromAccount: "BCA", toAccount: "Jago"
+   - "top up shopeepay 20rb pake bca admin 1000" -> fromAccount: "BCA", toAccount: "ShopeePay", adminFee: 1000
+   - "kemarin ada uang masuk 50000 ke jago karena tuker uang tunai" -> fromAccount: "Uang Tunai", toAccount: "Jago", description: "Tukar uang tunai ke Jago"
+   - "tukar tunai 50rb ke jago" -> fromAccount: "Uang Tunai", toAccount: "Jago"
+   - "tarik tunai 100rb dari bca" -> fromAccount: "BCA", toAccount: "Uang Tunai"
+   - "setor tunai 200rb ke mandiri" -> fromAccount: "Uang Tunai", toAccount: "Mandiri"
    Format JSON:
    {
      "action": "transfer",
      "amount": number (angka nominal tanpa titik/koma, misal 50000),
-     "fromAccount": string (pilih akun sumber dari Daftar Akun yang Dikenal, misal "Jago"),
-     "toAccount": string (pilih akun tujuan dari Daftar Akun yang Dikenal, misal "GoPay"),
+     "fromAccount": string (pilih akun sumber dari Daftar Akun yang Dikenal, misal "Uang Tunai" atau "Jago"),
+     "toAccount": string (pilih akun tujuan dari Daftar Akun yang Dikenal, misal "Jago" atau "GoPay"),
      "adminFee": number (jika ada biaya admin, jika tidak ada isi 0),
-     "description": string (keterangan singkat, misal "Transfer Jago ke GoPay"),
+     "description": string (keterangan singkat, misal "Tukar uang tunai ke Jago"),
      "date": string (format YYYY-MM-DD)
    }
 
-3. "single": Catatan pengeluaran atau pemasukan biasa.
-   Contoh: "kemarin saya makan bakso 25rb pake gopay", "kemarin keluar 50rb buat bensin", "2 hari lalu beli pulsa 50k bca", "tgl 3 dapet gaji 10jt masuk mandiri"
+3. "single": Catatan pengeluaran atau pemasukan biasa (bukan transfer antar akun).
+   - Pemasukan (type: "income"):
+     Contoh: "gaji 10jt masuk mandiri", "ada uang masuk 100rb ke jago dari teman", "dapat bonus 200k di bca"
+   - Pengeluaran (type: "expense"):
+     Contoh: "kemarin saya makan bakso 25rb pake gopay", "kemarin keluar 50rb buat bensin", "2 hari lalu beli pulsa 50k bca", "beli kopi 25rb cash"
    Format JSON:
    {
      "action": "single",
