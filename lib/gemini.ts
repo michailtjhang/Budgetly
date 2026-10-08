@@ -15,8 +15,8 @@ export async function getAvailableGeminiModel(): Promise<string> {
         if (res.ok) {
             const data = await res.json();
             const validModels = (data.models || [])
-                .filter((m: any) => m.supportedGenerationMethods?.includes("generateContent") && m.name.startsWith("models/gemini-"))
-                .map((m: any) => m.name.replace("models/", ""));
+                .filter((m: { name: string; supportedGenerationMethods?: string[] }) => m.supportedGenerationMethods?.includes("generateContent") && m.name.startsWith("models/gemini-"))
+                .map((m: { name: string }) => m.name.replace("models/", ""));
             
             // Prioritaskan model flash yang cepat dan murah
             const preferred = ["gemini-1.5-flash", "gemini-1.5-flash-latest", "gemini-2.0-flash", "gemini-1.5-pro", "gemini-pro"];
