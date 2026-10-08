@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { genAI, getAvailableGeminiModel, resetGeminiModelCache } from "@/lib/gemini";
 
 export const maxDuration = 60; // Izinkan durasi hingga 60s untuk pemrosesan AI di serverless
 
@@ -8,8 +8,6 @@ const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const ALLOWED_TELEGRAM_ID = process.env.TELEGRAM_ALLOWED_USER_ID;
 const CLERK_USER_ID = process.env.TELEGRAM_DEFAULT_CLERK_USER_ID;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-
-const genAI = new GoogleGenerativeAI(GEMINI_API_KEY || "");
 
 const ACCOUNT_OPTIONS = [
     "BCA", "blu by BCA", "BRI", "BNI", "Mandiri", "BJB", "Permata",
@@ -56,32 +54,21 @@ type GenerateContentInput = Parameters<
     ReturnType<GoogleGenerativeAI["getGenerativeModel"]>["generateContent"]
 >[0];
 
-// Helper dengan fallback otomatis untuk menghindari error model 404 / deprecated
 async function generateGeminiContent(contents: GenerateContentInput): Promise<string> {
-    const modelsToTry = [
-        "gemini-2.0-flash",
-        "gemini-2.5-flash",
-        "gemini-1.5-flash-latest",
-        "gemini-1.5-flash",
-        "gemini-pro"
-    ];
-
-    let lastError: unknown = null;
-    for (const modelName of modelsToTry) {
-        try {
-            const model = genAI.getGenerativeModel({ model: modelName });
-            const result = await model.generateContent(contents);
-            return result.response.text().trim();
-        } catch (err: unknown) {
-            lastError = err;
-            const errMsg = err instanceof Error ? err.message : String(err);
-            if (errMsg.includes("404") || errMsg.includes("not found") || errMsg.includes("is not supported")) {
-                continue;
-            }
-            throw err;
+    const modelName = await getAvailableGeminiModel();
+    try {
+        const model = genAI.getGenerativeModel({ model: modelName });
+        const result = await model.generateContent(contents);
+        return result.response.text().trim();
+    } catch (err: unknown) {
+        const errMsg = err instanceof Error ? err.message : String(err);
+        
+        // Jika 404, reset cache agar request berikutnya fetch list model ulang
+        if (errMsg.includes("404") || errMsg.includes("not found")) {
+            resetGeminiModelCache();
         }
+        throw err;
     }
-    throw lastError || new Error("Tidak ada model Gemini yang tersedia.");
 }
 
 function formatRupiah(amount: number): string {

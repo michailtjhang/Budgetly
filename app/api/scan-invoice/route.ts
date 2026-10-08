@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { GoogleGenerativeAI } from "@google/generative-ai";
-
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
+import { genAI, getAvailableGeminiModel, resetGeminiModelCache } from "@/lib/gemini";
 
 const CATEGORY_OPTIONS = [
     "Makanan & Minuman",
@@ -53,42 +51,26 @@ Kembalikan HANYA JSON, tanpa teks lain, tanpa markdown, tanpa backtick.
 Contoh output yang benar:
 {"description":"Indomaret - Snack & Minuman","amount":45000,"date":"2025-04-17","type":"expense","category":"Makanan & Minuman","confidence":0.95}`;
 
-        const modelsToTry = [
-            "gemini-2.0-flash",
-            "gemini-2.5-flash",
-            "gemini-1.5-flash-latest",
-            "gemini-1.5-flash",
-            "gemini-pro"
-        ];
-
+        const modelName = await getAvailableGeminiModel();
         let responseText = "";
-        let lastErr: unknown = null;
-        for (const modelName of modelsToTry) {
-            try {
-                const model = genAI.getGenerativeModel({ model: modelName });
-                const result = await model.generateContent([
-                    {
-                        inlineData: {
-                            data: base64,
-                            mimeType,
-                        },
+        try {
+            const model = genAI.getGenerativeModel({ model: modelName });
+            const result = await model.generateContent([
+                {
+                    inlineData: {
+                        data: base64,
+                        mimeType,
                     },
-                    prompt,
-                ]);
-                responseText = result.response.text().trim();
-                break;
-            } catch (err: unknown) {
-                lastErr = err;
-                const msg = err instanceof Error ? err.message : String(err);
-                if (msg.includes("404") || msg.includes("not found") || msg.includes("is not supported")) {
-                    continue;
-                }
-                throw err;
+                },
+                prompt,
+            ]);
+            responseText = result.response.text().trim();
+        } catch (err: unknown) {
+            const msg = err instanceof Error ? err.message : String(err);
+            if (msg.includes("404") || msg.includes("not found")) {
+                resetGeminiModelCache();
             }
-        }
-
-        if (!responseText && lastErr) {
-            throw lastErr;
+            throw err;
         }
 
         // Attempt to parse JSON — sometimes Gemini wraps in ```json
