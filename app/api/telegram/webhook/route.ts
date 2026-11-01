@@ -794,7 +794,7 @@ KEMBALIKAN HANYA JSON MURNI TANPA BACKTICK, TANPA MARKDOWN.`;
         const accChanged = (lastTx.account || "Lainnya") !== (updatedTx.account || "Lainnya");
         const typeChanged = lastTx.type !== updatedTx.type;
 
-        let replyMsg = `✏️ <b>Transaksi Berhasil Direvisi!</b>\n\n` +
+        const replyMsg = `✏️ <b>Transaksi Berhasil Direvisi!</b>\n\n` +
             `📝 <b>Keterangan:</b> ${updatedTx.description}${descChanged ? ` <i>(sebelumnya: "${lastTx.description}")</i>` : ""}\n` +
             `💰 <b>Nominal:</b> <code>${formatRupiah(updatedTx.amount)}</code>${amountChanged ? ` <i>(sebelumnya: ${formatRupiah(lastTx.amount)})</i>` : ""}\n` +
             `🏷️ <b>Tipe:</b> ${updatedTx.type === "income" ? "🟢 Pemasukan" : "🔴 Pengeluaran"}${typeChanged ? ` <i>(diubah dari ${lastTx.type === "income" ? "Pemasukan" : "Pengeluaran"})</i>` : ""}\n` +
