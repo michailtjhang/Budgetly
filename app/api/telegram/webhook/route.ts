@@ -24,6 +24,43 @@ const CATEGORY_OPTIONS = [
     "Penghasilan", "Bunga", "Lainnya"
 ];
 
+const BOT_COMMANDS = [
+    { command: "menu", description: "Buka menu & tombol pintasan" },
+    { command: "revisi", description: "Revisi / batalkan transaksi terakhir" },
+    { command: "saldo", description: "Cek saldo rekening & e-wallet" },
+    { command: "rekap", description: "Rekap pengeluaran bulan ini" },
+    { command: "riwayat", description: "Lihat 10 transaksi terakhir" },
+    { command: "bantuan", description: "Panduan cara penggunaan bot" },
+    { command: "status", description: "Cek status akun Budgetly" },
+    { command: "logout", description: "Putuskan koneksi akun Budgetly" }
+];
+
+const MAIN_MENU_KEYBOARD = {
+    inline_keyboard: [
+        [
+            { text: "💳 Cek Saldo", callback_data: "cmd_saldo" },
+            { text: "📊 Rekap Bulan Ini", callback_data: "cmd_rekap" }
+        ],
+        [
+            { text: "📜 10 Riwayat", callback_data: "cmd_riwayat" },
+            { text: "✏️ Revisi Terakhir", callback_data: "cmd_revisi" }
+        ],
+        [
+            { text: "❓ Panduan & Bantuan", callback_data: "cmd_bantuan" },
+            { text: "👤 Status Akun", callback_data: "cmd_status" }
+        ]
+    ]
+};
+
+const QUICK_REVISI_KEYBOARD = {
+    inline_keyboard: [
+        [
+            { text: "✏️ Revisi Transaksi Ini", callback_data: "cmd_revisi" },
+            { text: "💳 Cek Saldo", callback_data: "cmd_saldo" }
+        ]
+    ]
+};
+
 interface GeminiReceiptResult {
     error?: string;
     isTransfer?: boolean;
@@ -37,7 +74,7 @@ interface GeminiReceiptResult {
 }
 
 interface GeminiTextResult {
-    action?: "transfer" | "single" | "chat" | "history";
+    action?: "transfer" | "single" | "chat" | "history" | "revision";
     amount?: number;
     adminFee?: number;
     fromAccount?: string;
@@ -48,6 +85,7 @@ interface GeminiTextResult {
     description?: string;
     date?: string;
     reply?: string;
+    instruction?: string;
 }
 
 function formatRupiah(amount: number): string {
@@ -67,7 +105,12 @@ function formatTanggalIndo(d: Date): string {
     return `${days[d.getDay()]}, ${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;
 }
 
-async function sendTelegramMessage(chatId: number | string, text: string, replyToMessageId?: number) {
+async function sendTelegramMessage(
+    chatId: number | string,
+    text: string,
+    replyToMessageId?: number,
+    replyMarkup?: object
+) {
     if (!BOT_TOKEN) return;
     try {
         await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
@@ -78,10 +121,27 @@ async function sendTelegramMessage(chatId: number | string, text: string, replyT
                 text,
                 parse_mode: "HTML",
                 reply_to_message_id: replyToMessageId,
+                ...(replyMarkup ? { reply_markup: replyMarkup } : {})
             }),
         });
     } catch (err) {
         console.error("[Telegram] Error sending message:", err);
+    }
+}
+
+async function answerCallbackQuery(callbackQueryId: string, text?: string) {
+    if (!BOT_TOKEN) return;
+    try {
+        await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/answerCallbackQuery`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                callback_query_id: callbackQueryId,
+                ...(text ? { text } : {})
+            }),
+        });
+    } catch (err) {
+        console.error("[Telegram] Error answering callback query:", err);
     }
 }
 
@@ -98,6 +158,44 @@ async function sendChatAction(chatId: number | string, action: string = "typing"
         });
     } catch (err) {
         console.error("[Telegram] Error sending action:", err);
+    }
+}
+
+// Daftarkan commands bot ke Telegram agar saat user mengetik '/' muncul autocomplete pilihan menu
+async function registerTelegramCommands(): Promise<boolean> {
+    if (!BOT_TOKEN) return false;
+    try {
+        const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/setMyCommands`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ commands: BOT_COMMANDS }),
+        });
+
+        // Set Menu Button di pojok bawah chat Telegram
+        await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/setChatMenuButton`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                menu_button: { type: "commands" }
+            }),
+        });
+
+        const json = await res.json();
+        return Boolean(json.ok);
+    } catch (err) {
+        console.error("[Telegram] Error registering commands:", err);
+        return false;
+    }
+}
+
+let hasRegisteredCommands = false;
+async function ensureCommandsRegistered() {
+    if (hasRegisteredCommands || !BOT_TOKEN) return;
+    try {
+        const ok = await registerTelegramCommands();
+        if (ok) hasRegisteredCommands = true;
+    } catch {
+        // ignore
     }
 }
 
@@ -176,6 +274,69 @@ async function unlinkTelegramUser(telegramId: string): Promise<boolean> {
     }
 }
 
+// Tampilkan Menu Interaktif
+async function handleShowMenu(chatId: number | string, clerkUserId: string, messageId?: number) {
+    const menuMsg = `📋 <b>Menu Budgetly Assistant</b>\n\n` +
+        `Silakan pilih menu di bawah ini atau ketik langsung perintah yang Anda inginkan:\n\n` +
+        `• /saldo - Cek rincian saldo rekening & e-wallet\n` +
+        `• /rekap - Ringkasan pengeluaran & pemasukan bulan ini\n` +
+        `• /riwayat - 10 riwayat transaksi terakhir\n` +
+        `• /revisi - Perbaiki atau batalkan transaksi terakhir\n` +
+        `• /bantuan - Panduan lengkap & contoh pencatatan\n` +
+        `• /status - Cek status koneksi akun Budgetly\n` +
+        `• /logout - Putuskan koneksi akun`;
+
+    await sendTelegramMessage(chatId, menuMsg, messageId, MAIN_MENU_KEYBOARD);
+}
+
+// Tampilkan Panduan / Bantuan
+async function handleShowHelp(chatId: number | string, clerkUserId: string, messageId?: number) {
+    const welcomeText = `👋 <b>Halo! Akun Budgetly Anda Sudah Terhubung!</b>
+👤 ID: <code>${clerkUserId}</code>
+
+💡 <b>Cara Penggunaan:</b>
+
+1️⃣ <b>Transfer Antar Rekening / E-Wallet:</b>
+• <i>"tf ke gopay dari jago 50rb"</i>
+• <i>"transfer 100k dari bca ke seabank"</i>
+• <i>"top up ovo dari bca 25rb admin 1000"</i>
+👉 <i>(Saldo pengirim otomatis berkurang, dan penerima bertambah!)</i>
+
+2️⃣ <b>Pengeluaran / Pemasukan Teks:</b>
+• <i>"makan siang geprek 25rb pake bca"</i>
+• <i>"bensin 35k tunai"</i>
+• <i>"gaji bulanan 10jt masuk mandiri"</i>
+
+3️⃣ <b>Bisa Catat Tanggal Lampau (Kemarin, Lusa, dll):</b>
+• <i>"kemarin saya makan bakso 25rb pake bca"</i>
+• <i>"kemarin keluar 50rb buat bensin"</i>
+• <i>"2 hari lalu tf ke gopay dari bca 100rb"</i>
+👉 <i>(Tanggal otomatis disesuaikan ke kemarin / hari lampau!)</i>
+
+4️⃣ <b>Kirim Foto Struk / QRIS / Bukti Transfer:</b>
+• Langsung kirim foto screenshot QRIS atau bukti transfer!
+• AI otomatis mendeteksi nominal, merchant, dan rekening pengeluaran.
+
+✏️ <b>Revisi Transaksi (Jika Salah Ketik):</b>
+• /revisi - Tampilkan transaksi terakhir & opsi ubah/hapus
+• /revisi 35rb - Ubah nominal saja
+• /revisi pake Mandiri - Ubah rekening saja
+• /revisi makan soto 30rb pake jago - Ubah rincian lengkap
+• /revisi hapus - Batalkan/hapus transaksi terakhir
+
+📊 <b>Daftar Perintah (Ketik '/' untuk melihat menu):</b>
+• /menu - Tampilkan tombol menu interaktif
+• /revisi - Perbaiki atau batalkan transaksi terakhir
+• /riwayat - Lihat 10 transaksi terakhir
+• /saldo - Cek rincian saldo rekening & e-wallet
+• /rekap - Ringkasan pengeluaran & pemasukan bulan ini
+• /status - Cek status akun Anda
+• /logout - Putuskan koneksi akun`;
+
+    await sendTelegramMessage(chatId, welcomeText, messageId, MAIN_MENU_KEYBOARD);
+}
+
+// Tampilkan Riwayat 10 Transaksi
 async function handleShowHistory(chatId: number | string, clerkUserId: string, messageId?: number) {
     await sendChatAction(chatId, "typing");
     const transactions = await db.transaction.findMany({
@@ -188,7 +349,8 @@ async function handleShowHistory(chatId: number | string, clerkUserId: string, m
         await sendTelegramMessage(
             chatId,
             "📜 <b>Riwayat Transaksi</b>\n\nBelum ada transaksi yang tercatat di akun Budgetly Anda.",
-            messageId
+            messageId,
+            MAIN_MENU_KEYBOARD
         );
         return;
     }
@@ -205,26 +367,516 @@ async function handleShowHistory(chatId: number | string, clerkUserId: string, m
         msg += `   📅 <i>${dateStr}</i> | 🏦 <i>${t.account || "Lainnya"}</i> | 📁 <i>${t.category || "Lainnya"}</i>\n\n`;
     }
 
-    await sendTelegramMessage(chatId, msg, messageId);
+    msg += `💡 <i>Ketik /revisi jika ingin mengubah atau membatalkan transaksi terakhir.</i>`;
+
+    await sendTelegramMessage(chatId, msg, messageId, MAIN_MENU_KEYBOARD);
 }
 
-// Endpoint GET untuk mengecek status webhook via browser
+// Tampilkan Rincian Saldo
+async function handleShowSaldo(chatId: number | string, clerkUserId: string, messageId?: number) {
+    await sendChatAction(chatId, "typing");
+    const transactions = await db.transaction.findMany({
+        where: { userId: clerkUserId },
+    });
+
+    const balances = transactions.reduce((acc, t) => {
+        const accName = t.account || "Lainnya";
+        const amt = Number(t.amount) || 0;
+        if (!acc[accName]) acc[accName] = 0;
+        if (t.type === "income") {
+            acc[accName] += amt;
+        } else {
+            acc[accName] -= amt;
+        }
+        return acc;
+    }, {} as Record<string, number>);
+
+    const nonZeroAccounts = Object.entries(balances)
+        .filter(([, bal]) => bal !== 0)
+        .sort((a, b) => b[1] - a[1]);
+
+    const totalBalance = Object.values(balances).reduce((sum, b) => sum + b, 0);
+
+    if (nonZeroAccounts.length === 0) {
+        await sendTelegramMessage(
+            chatId,
+            "🏦 <b>Saldo Akun Budgetly</b>\n\nBelum ada saldo transaksi yang tercatat di akun Anda.",
+            messageId,
+            MAIN_MENU_KEYBOARD
+        );
+        return;
+    }
+
+    let msg = `🏦 <b>Rincian Saldo Akun Budgetly:</b>\n\n`;
+    for (const [accName, bal] of nonZeroAccounts) {
+        msg += `• <b>${accName}</b>: <code>${formatRupiah(bal)}</code>\n`;
+    }
+    msg += `\n💰 <b>Total Saldo:</b> <code>${formatRupiah(totalBalance)}</code>`;
+
+    await sendTelegramMessage(chatId, msg, messageId, MAIN_MENU_KEYBOARD);
+}
+
+// Tampilkan Rekap Bulan Ini
+async function handleShowRekap(chatId: number | string, clerkUserId: string, messageId?: number) {
+    await sendChatAction(chatId, "typing");
+    const now = new Date();
+    const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    const transactions = await db.transaction.findMany({
+        where: {
+            userId: clerkUserId,
+            date: { gte: firstDayOfMonth },
+        },
+    });
+
+    let incomeTotal = 0;
+    let expenseTotal = 0;
+
+    for (const t of transactions) {
+        if (t.type === "income") incomeTotal += Number(t.amount) || 0;
+        else expenseTotal += Number(t.amount) || 0;
+    }
+
+    const monthNames = [
+        "Januari", "Februari", "Maret", "April", "Mei", "Juni",
+        "Juli", "Agustus", "September", "Oktober", "November", "Desember"
+    ];
+    const currentMonthName = monthNames[now.getMonth()];
+
+    const rekapMsg = `📊 <b>Rekap Bulan ${currentMonthName} ${now.getFullYear()}</b>\n\n` +
+        `🟢 <b>Pemasukan:</b> <code>${formatRupiah(incomeTotal)}</code>\n` +
+        `🔴 <b>Pengeluaran:</b> <code>${formatRupiah(expenseTotal)}</code>\n` +
+        `💵 <b>Selisih (Net):</b> <code>${formatRupiah(incomeTotal - expenseTotal)}</code>\n\n` +
+        `📝 Total: ${transactions.length} transaksi`;
+
+    await sendTelegramMessage(chatId, rekapMsg, messageId, MAIN_MENU_KEYBOARD);
+}
+
+// Tampilkan Status Akun
+async function handleShowStatus(chatId: number | string, senderId: string, clerkUserId: string | null, messageId?: number) {
+    if (clerkUserId) {
+        await sendTelegramMessage(
+            chatId,
+            `👤 <b>Status Akun Anda:</b>\n\n` +
+            `• <b>Telegram ID:</b> <code>${senderId}</code>\n` +
+            `• <b>Clerk User ID:</b> <code>${clerkUserId}</code>\n` +
+            `• <b>Status:</b> 🟢 Terhubung\n\n` +
+            `<i>Ketik /logout jika ingin memutuskan atau berganti akun.</i>`,
+            messageId,
+            MAIN_MENU_KEYBOARD
+        );
+    } else {
+        await sendTelegramMessage(
+            chatId,
+            `👤 <b>Status Akun Anda:</b>\n\n` +
+            `• <b>Telegram ID:</b> <code>${senderId}</code>\n` +
+            `• <b>Status:</b> 🔴 Belum terhubung\n\n` +
+            `Silakan kirimkan User ID Budgetly Anda untuk mulai mencatat keuangan.`,
+            messageId
+        );
+    }
+}
+
+// Tampilkan Info Transaksi Terakhir & Panduan /revisi
+async function handleShowRevisiPrompt(chatId: number | string, clerkUserId: string, messageId?: number) {
+    await sendChatAction(chatId, "typing");
+    const lastTx = await db.transaction.findFirst({
+        where: { userId: clerkUserId },
+        orderBy: { id: "desc" },
+    });
+
+    if (!lastTx) {
+        await sendTelegramMessage(
+            chatId,
+            "⚠️ <b>Belum Ada Transaksi</b>\n\nAnda belum memiliki transaksi yang tercatat untuk direvisi.",
+            messageId,
+            MAIN_MENU_KEYBOARD
+        );
+        return;
+    }
+
+    const tDate = new Date(lastTx.date);
+    const dateStr = formatTanggalIndo(tDate);
+    const isIncome = lastTx.type === "income";
+
+    const msg = `🔍 <b>Transaksi Terakhir Anda:</b>\n\n` +
+        `📝 <b>Keterangan:</b> ${lastTx.description}\n` +
+        `💰 <b>Nominal:</b> <code>${formatRupiah(lastTx.amount)}</code>\n` +
+        `🏷️ <b>Tipe:</b> ${isIncome ? "🟢 Pemasukan" : "🔴 Pengeluaran"}\n` +
+        `🏦 <b>Akun:</b> ${lastTx.account || "Lainnya"}\n` +
+        `📁 <b>Kategori:</b> ${lastTx.category || "Lainnya"}\n` +
+        `📅 <b>Tanggal:</b> ${dateStr}\n\n` +
+        `💡 <b>Cara Merevisi:</b>\n` +
+        `Ketik <code>/revisi [koreksi Anda]</code>\n\n` +
+        `<b>Contoh koreksi:</b>\n` +
+        `• <code>/revisi 35rb</code> <i>(Hanya ubah nominal)</i>\n` +
+        `• <code>/revisi pake Mandiri</code> <i>(Hanya ubah rekening)</i>\n` +
+        `• <code>/revisi makan soto 30rb pake Jago</code> <i>(Ubah data lengkap)</i>\n` +
+        `• <code>/revisi kemarin</code> <i>(Hanya ubah tanggal)</i>\n\n` +
+        `Atau klik tombol di bawah jika ingin membatalkan/menghapus transaksi ini:`;
+
+    const keyboard = {
+        inline_keyboard: [
+            [
+                { text: "🗑️ Batalkan / Hapus Transaksi Ini", callback_data: `revisi_delete_${lastTx.id}` }
+            ],
+            [
+                { text: "📜 Lihat Riwayat", callback_data: "cmd_riwayat" },
+                { text: "📋 Menu Utama", callback_data: "cmd_menu" }
+            ]
+        ]
+    };
+
+    await sendTelegramMessage(chatId, msg, messageId, keyboard);
+}
+
+// Hapus / Batalkan Transaksi
+async function handleDeleteTransaction(chatId: number | string, clerkUserId: string, txId?: number, messageId?: number) {
+    await sendChatAction(chatId, "typing");
+
+    let targetTx = null;
+    if (txId) {
+        targetTx = await db.transaction.findFirst({
+            where: { id: txId, userId: clerkUserId },
+        });
+    }
+    if (!targetTx) {
+        targetTx = await db.transaction.findFirst({
+            where: { userId: clerkUserId },
+            orderBy: { id: "desc" },
+        });
+    }
+
+    if (!targetTx) {
+        await sendTelegramMessage(chatId, "⚠️ Tidak ada transaksi yang dapat dihapus.", messageId, MAIN_MENU_KEYBOARD);
+        return;
+    }
+
+    const isTransfer = targetTx.description.startsWith("Transfer ke ") || targetTx.description.startsWith("Transfer dari ");
+    if (isTransfer) {
+        // Hapus kedua transaksi transfer dan biaya admin jika ada (dalam rentang 5 detik)
+        const related = await db.transaction.findMany({
+            where: {
+                userId: clerkUserId,
+                createdAt: {
+                    gte: new Date(targetTx.createdAt.getTime() - 5000),
+                    lte: new Date(targetTx.createdAt.getTime() + 5000),
+                },
+            },
+        });
+        const idsToDelete = related.map(t => t.id);
+        await db.transaction.deleteMany({
+            where: { id: { in: idsToDelete } },
+        });
+
+        const replyMsg = `🗑️ <b>Transfer Berhasil Dibatalkan!</b>\n\n` +
+            `• <b>Keterangan:</b> ${targetTx.description}\n` +
+            `• <b>Nominal:</b> <code>${formatRupiah(targetTx.amount)}</code>\n\n` +
+            `✅ <i>Catatan transfer beserta saldo rekening terkait telah dibatalkan dari Budgetly.</i>`;
+        await sendTelegramMessage(chatId, replyMsg, messageId, MAIN_MENU_KEYBOARD);
+        return;
+    }
+
+    // Transaksi tunggal
+    await db.transaction.delete({
+        where: { id: targetTx.id },
+    });
+
+    const replyMsg = `🗑️ <b>Transaksi Berhasil Dihapus!</b>\n\n` +
+        `• <b>Keterangan:</b> ${targetTx.description}\n` +
+        `• <b>Nominal:</b> <code>${formatRupiah(targetTx.amount)}</code>\n` +
+        `• <b>Akun:</b> ${targetTx.account || "Lainnya"}\n\n` +
+        `✅ <i>Catatan transaksi telah dihapus dari Budgetly.</i>`;
+    await sendTelegramMessage(chatId, replyMsg, messageId, MAIN_MENU_KEYBOARD);
+}
+
+// Proses Revisi Cerdas dengan AI
+async function handlePerformRevision(chatId: number | string, clerkUserId: string, revisionInstruction: string, messageId?: number) {
+    await sendChatAction(chatId, "typing");
+
+    const lastTx = await db.transaction.findFirst({
+        where: { userId: clerkUserId },
+        orderBy: { id: "desc" },
+    });
+
+    if (!lastTx) {
+        await sendTelegramMessage(chatId, "⚠️ Belum ada transaksi yang dapat direvisi.", messageId);
+        return;
+    }
+
+    if (/^(hapus|batal|delete|cancel)$/i.test(revisionInstruction.trim())) {
+        await handleDeleteTransaction(chatId, clerkUserId, lastTx.id, messageId);
+        return;
+    }
+
+    const now = new Date();
+    const todayStr = now.toISOString().split("T")[0];
+    const daysIndo = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
+    const currentDayName = daysIndo[now.getDay()];
+
+    const isTransfer = lastTx.description.startsWith("Transfer ke ") || lastTx.description.startsWith("Transfer dari ");
+
+    if (isTransfer) {
+        const related = await db.transaction.findMany({
+            where: {
+                userId: clerkUserId,
+                createdAt: {
+                    gte: new Date(lastTx.createdAt.getTime() - 5000),
+                    lte: new Date(lastTx.createdAt.getTime() + 5000),
+                },
+            },
+            orderBy: { id: "asc" },
+        });
+
+        const expenseTx = related.find(t => t.type === "expense" && t.description.startsWith("Transfer ke "));
+        const incomeTx = related.find(t => t.type === "income" && t.description.startsWith("Transfer dari "));
+
+        if (expenseTx && incomeTx) {
+            const prompt = `Kamu adalah asisten pencatat keuangan Budgetly.
+Pengguna ingin MEREVISI transaksi TRANSFER antar rekening/e-wallet terakhirnya karena salah ketik.
+
+DATA TRANSFER SAAT INI:
+- Nominal: ${expenseTx.amount}
+- Dari Akun: ${expenseTx.account}
+- Ke Akun: ${incomeTx.account}
+- Tanggal: ${new Date(expenseTx.date).toISOString().split("T")[0]}
+
+Daftar Akun yang Dikenal: ${ACCOUNT_OPTIONS.join(", ")}
+Hari Ini: ${currentDayName}, ${todayStr}
+
+INSTRUKSI KOREKSI PENGGUNA:
+"${revisionInstruction}"
+
+ATURAN REVISI TRANSFER:
+1. Perbarui nilai field yang diminta diubah oleh pengguna. Jika tidak disebutkan, pertahankan data saat ini.
+2. Format JSON MURNI:
+{
+  "amount": number (nominal transfer baru),
+  "fromAccount": string (akun pengirim),
+  "toAccount": string (akun penerima),
+  "date": string (format YYYY-MM-DD)
+}
+
+KEMBALIKAN HANYA JSON MURNI TANPA BACKTICK, TANPA MARKDOWN.`;
+
+            let geminiRes = "";
+            try {
+                geminiRes = await generateGeminiContent(prompt);
+            } catch (err) {
+                console.error("[Telegram Revision Error]:", err);
+                await sendTelegramMessage(chatId, "❌ Gagal memproses revisi dengan AI. Silakan coba lagi.", messageId);
+                return;
+            }
+
+            let cleaned = geminiRes.trim();
+            if (cleaned.startsWith("```")) {
+                cleaned = cleaned.replace(/```(?:json)?\n?/g, "").replace(/```$/g, "").trim();
+            }
+
+            try {
+                const parsed = JSON.parse(cleaned);
+                const newAmount = Number(parsed.amount) || expenseTx.amount;
+                const newFrom = parsed.fromAccount || expenseTx.account || "Lainnya";
+                const newTo = parsed.toAccount || incomeTx.account || "Lainnya";
+                const newDate = parsed.date ? new Date(parsed.date) : expenseTx.date;
+
+                await db.$transaction([
+                    db.transaction.update({
+                        where: { id: expenseTx.id },
+                        data: {
+                            description: `Transfer ke ${newTo}`,
+                            amount: newAmount,
+                            account: newFrom,
+                            date: newDate,
+                        },
+                    }),
+                    db.transaction.update({
+                        where: { id: incomeTx.id },
+                        data: {
+                            description: `Transfer dari ${newFrom}`,
+                            amount: newAmount,
+                            account: newTo,
+                            date: newDate,
+                        },
+                    }),
+                ]);
+
+                const replyMsg = `✏️ <b>Transfer Berhasil Direvisi!</b>\n\n` +
+                    `📤 <b>Keluar:</b> <code>${formatRupiah(newAmount)}</code> (${newFrom})\n` +
+                    `📥 <b>Masuk:</b> <code>${formatRupiah(newAmount)}</code> (${newTo})\n` +
+                    `📅 <b>Tanggal:</b> ${formatTanggalIndo(newDate)}\n\n` +
+                    `✅ <i>Saldo dan riwayat transfer telah disesuaikan di Budgetly.</i>`;
+
+                await sendTelegramMessage(chatId, replyMsg, messageId, QUICK_REVISI_KEYBOARD);
+                return;
+            } catch {
+                await sendTelegramMessage(chatId, "⚠️ Gagal membaca format revisi. Coba contoh: <i>'/revisi 75rb'</i> atau <i>'/revisi dari BCA ke GoPay 50rb'</i>", messageId);
+                return;
+            }
+        }
+    }
+
+    // Transaksi tunggal (non-transfer)
+    const prompt = `Kamu adalah asisten pencatat keuangan Budgetly.
+Pengguna ingin MEREVISI transaksi keuangan terakhirnya yang salah ketik / salah catat.
+
+DATA TRANSAKSI SAAT INI:
+- Keterangan: "${lastTx.description}"
+- Nominal: ${lastTx.amount}
+- Tipe: "${lastTx.type}" (expense / income)
+- Akun: "${lastTx.account || "Lainnya"}"
+- Kategori: "${lastTx.category || "Lainnya"}"
+- Tanggal: "${new Date(lastTx.date).toISOString().split("T")[0]}"
+
+Daftar Akun yang Dikenal: ${ACCOUNT_OPTIONS.join(", ")}
+Daftar Kategori: ${CATEGORY_OPTIONS.join(", ")}
+Hari Ini: ${currentDayName}, ${todayStr}
+
+INSTRUKSI REVISI PENGGUNA:
+"${revisionInstruction}"
+
+ATURAN REVISI:
+1. Perbarui HANYA data yang ingin dikoreksi/diubah pengguna. Data yang tidak disebutkan gunakan data saat ini.
+2. Jika pengguna menyebut nominal (misal "35rb", "50000"), ubah "amount".
+3. Jika pengguna menyebut nama akun (misal "pake bca", "ganti ke mandiri"), ubah "account".
+4. Jika pengguna menyebut keterangan belanja baru, ubah "description".
+5. Jika pengguna menyebut kategori baru, ubah "category".
+6. Jika pengguna menyebut keterangan waktu (misal "kemarin"), hitung tanggal baru dan ubah "date".
+7. Format JSON MURNI:
+{
+  "description": string,
+  "amount": number,
+  "type": "expense" | "income",
+  "account": string,
+  "category": string,
+  "date": string (format YYYY-MM-DD)
+}
+
+KEMBALIKAN HANYA JSON MURNI TANPA BACKTICK, TANPA MARKDOWN.`;
+
+    let geminiRes = "";
+    try {
+        geminiRes = await generateGeminiContent(prompt);
+    } catch (err) {
+        console.error("[Telegram Revision Error]:", err);
+        await sendTelegramMessage(chatId, "❌ Gagal memproses revisi dengan AI. Silakan coba lagi.", messageId);
+        return;
+    }
+
+    let cleaned = geminiRes.trim();
+    if (cleaned.startsWith("```")) {
+        cleaned = cleaned.replace(/```(?:json)?\n?/g, "").replace(/```$/g, "").trim();
+    }
+
+    try {
+        const parsed = JSON.parse(cleaned);
+        const newAmount = Number(parsed.amount) || lastTx.amount;
+        const newDesc = parsed.description || lastTx.description;
+        const newType = parsed.type === "income" ? "income" : "expense";
+        const newAccount = parsed.account && ACCOUNT_OPTIONS.includes(parsed.account) ? parsed.account : (parsed.account || lastTx.account || "Lainnya");
+        const newCategory = parsed.category && CATEGORY_OPTIONS.includes(parsed.category) ? parsed.category : (lastTx.category || "Lainnya");
+        const newDate = parsed.date ? new Date(parsed.date) : lastTx.date;
+
+        const updatedTx = await db.transaction.update({
+            where: { id: lastTx.id },
+            data: {
+                description: newDesc,
+                amount: newAmount,
+                type: newType,
+                account: newAccount,
+                category: newCategory,
+                date: newDate,
+            },
+        });
+
+        const descChanged = lastTx.description !== updatedTx.description;
+        const amountChanged = lastTx.amount !== updatedTx.amount;
+        const accChanged = (lastTx.account || "Lainnya") !== (updatedTx.account || "Lainnya");
+        const typeChanged = lastTx.type !== updatedTx.type;
+
+        let replyMsg = `✏️ <b>Transaksi Berhasil Direvisi!</b>\n\n` +
+            `📝 <b>Keterangan:</b> ${updatedTx.description}${descChanged ? ` <i>(sebelumnya: "${lastTx.description}")</i>` : ""}\n` +
+            `💰 <b>Nominal:</b> <code>${formatRupiah(updatedTx.amount)}</code>${amountChanged ? ` <i>(sebelumnya: ${formatRupiah(lastTx.amount)})</i>` : ""}\n` +
+            `🏷️ <b>Tipe:</b> ${updatedTx.type === "income" ? "🟢 Pemasukan" : "🔴 Pengeluaran"}${typeChanged ? ` <i>(diubah dari ${lastTx.type === "income" ? "Pemasukan" : "Pengeluaran"})</i>` : ""}\n` +
+            `🏦 <b>Akun:</b> ${updatedTx.account || "Lainnya"}${accChanged ? ` <i>(sebelumnya: ${lastTx.account || "Lainnya"})</i>` : ""}\n` +
+            `📁 <b>Kategori:</b> ${updatedTx.category || "Lainnya"}\n` +
+            `📅 <b>Tanggal:</b> ${formatTanggalIndo(new Date(updatedTx.date))}\n\n` +
+            `✅ <i>Catatan di dashboard Budgetly Anda sudah otomatis terupdate.</i>`;
+
+        await sendTelegramMessage(chatId, replyMsg, messageId, QUICK_REVISI_KEYBOARD);
+    } catch {
+        await sendTelegramMessage(chatId, "⚠️ Format revisi tidak dapat dipahami. Coba contoh: <i>'/revisi 35rb'</i> atau <i>'/revisi pake Mandiri'</i>", messageId);
+    }
+}
+
+// Endpoint GET untuk mengecek status webhook & mendaftarkan command otomatis
 export async function GET() {
+    let commandsResult = false;
+    if (BOT_TOKEN) {
+        commandsResult = await registerTelegramCommands();
+    }
     return NextResponse.json({
         status: "active",
         botConfigured: Boolean(BOT_TOKEN),
         geminiConfigured: Boolean(GEMINI_API_KEY),
         allowedUserConfigured: Boolean(ALLOWED_TELEGRAM_ID),
         clerkUserConfigured: Boolean(CLERK_USER_ID),
-        message: "Budgetly Telegram Webhook is running with multi-user support."
+        commandsRegistered: commandsResult,
+        message: "Budgetly Telegram Webhook is running with multi-user and revision support."
     });
 }
 
 export async function POST(req: NextRequest) {
     try {
         const body = await req.json();
-        const message = body.message || body.edited_message;
 
+        // Pastikan command Telegram sudah terdaftar di Telegram
+        await ensureCommandsRegistered();
+
+        // ==========================================
+        // HANDLE CALLBACK QUERY (Klik Tombol Inline)
+        // ==========================================
+        if (body.callback_query) {
+            const callbackQuery = body.callback_query;
+            const callbackId = callbackQuery.id;
+            const chatId = callbackQuery.message?.chat?.id;
+            const senderId = callbackQuery.from?.id ? String(callbackQuery.from.id) : "";
+            const data = callbackQuery.data || "";
+
+            await answerCallbackQuery(callbackId);
+
+            if (!chatId) return NextResponse.json({ ok: true });
+
+            const activeClerkUserId = await getLinkedClerkUserId(senderId);
+            if (!activeClerkUserId) {
+                await sendTelegramMessage(chatId, "⚠️ Akun Telegram Anda belum terhubung. Silakan login dengan mengirimkan User ID Budgetly Anda.");
+                return NextResponse.json({ ok: true });
+            }
+
+            if (data === "cmd_saldo") {
+                await handleShowSaldo(chatId, activeClerkUserId);
+            } else if (data === "cmd_rekap") {
+                await handleShowRekap(chatId, activeClerkUserId);
+            } else if (data === "cmd_riwayat") {
+                await handleShowHistory(chatId, activeClerkUserId);
+            } else if (data === "cmd_bantuan") {
+                await handleShowHelp(chatId, activeClerkUserId);
+            } else if (data === "cmd_status") {
+                await handleShowStatus(chatId, senderId, activeClerkUserId);
+            } else if (data === "cmd_menu") {
+                await handleShowMenu(chatId, activeClerkUserId);
+            } else if (data === "cmd_revisi") {
+                await handleShowRevisiPrompt(chatId, activeClerkUserId);
+            } else if (data.startsWith("revisi_delete_")) {
+                const txIdStr = data.replace("revisi_delete_", "");
+                const txId = parseInt(txIdStr, 10);
+                await handleDeleteTransaction(chatId, activeClerkUserId, txId);
+            }
+
+            return NextResponse.json({ ok: true });
+        }
+
+        const message = body.message;
         if (!message || !message.chat) {
             return NextResponse.json({ ok: true });
         }
@@ -239,7 +891,6 @@ export async function POST(req: NextRequest) {
         const caption = message.caption?.trim() || "";
 
         // 1. Cek apakah pesan adalah permintaan Login / Pairing Clerk ID
-        // Contoh: "/login user_2..." atau "/start user_2..." atau langsung kirim "user_2..."
         const loginPrefixMatch = text.match(/^\/(?:login|start)\s+(user_[a-zA-Z0-9_-]+)/i);
         const directClerkIdMatch = text.match(/^(user_[a-zA-Z0-9_-]{10,})$/i);
         const pairingClerkId = loginPrefixMatch ? loginPrefixMatch[1] : (directClerkIdMatch ? directClerkIdMatch[1] : null);
@@ -260,10 +911,10 @@ Sekarang Anda bisa langsung mencatat keuangan:
 • <b>Transfer:</b> <i>"tf ke gopay dari jago 50rb"</i>
 • <b>Tanggal Lampau:</b> <i>"kemarin beli bensin 35k tunai"</i>
 • <b>Kirim Foto:</b> Screenshot struk / bukti transfer / QRIS
-• <b>Perintah:</b> /saldo, /rekap, atau /riwayat
+• <b>Revisi Transaksi:</b> <i>"/revisi"</i> jika salah ketik
 
-✨ <i>Akun Anda tersimpan otomatis. Anda tidak perlu memasukkan User ID lagi besok-besok!</i>`;
-                await sendTelegramMessage(chatId, welcomeMsg, messageId);
+Ketik <b>'/'</b> atau tombol menu di bawah untuk melihat pilihan perintah!`;
+                await sendTelegramMessage(chatId, welcomeMsg, messageId, MAIN_MENU_KEYBOARD);
                 return NextResponse.json({ ok: true });
             } else {
                 await sendTelegramMessage(chatId, "❌ Gagal menghubungkan akun. Silakan coba lagi sebentar lagi.", messageId);
@@ -285,26 +936,7 @@ Sekarang Anda bisa langsung mencatat keuangan:
         // 3. Command /status atau /whoami
         if (text === "/status" || text === "/whoami") {
             const currentLinkedId = await getLinkedClerkUserId(senderId);
-            if (currentLinkedId) {
-                await sendTelegramMessage(
-                    chatId,
-                    `👤 <b>Status Akun Anda:</b>\n\n` +
-                    `• <b>Telegram ID:</b> <code>${senderId}</code>\n` +
-                    `• <b>Clerk User ID:</b> <code>${currentLinkedId}</code>\n` +
-                    `• <b>Status:</b> 🟢 Terhubung\n\n` +
-                    `<i>Ketik /logout jika ingin memutuskan atau berganti akun.</i>`,
-                    messageId
-                );
-            } else {
-                await sendTelegramMessage(
-                    chatId,
-                    `👤 <b>Status Akun Anda:</b>\n\n` +
-                    `• <b>Telegram ID:</b> <code>${senderId}</code>\n` +
-                    `• <b>Status:</b> 🔴 Belum terhubung\n\n` +
-                    `Silakan kirimkan User ID Budgetly Anda untuk mulai mencatat keuangan.`,
-                    messageId
-                );
-            }
+            await handleShowStatus(chatId, senderId, currentLinkedId, messageId);
             return NextResponse.json({ ok: true });
         }
 
@@ -336,42 +968,15 @@ Bot ini dapat membantu Anda mencatat keuangan secara otomatis ke dashboard Budge
         // USER SUDAH TERHUBUNG (activeClerkUserId)
         // ==========================================
 
-        // Handle Command: /start atau /help
+        // Handle Command: /menu atau "/"
+        if (text === "/" || text === "/menu" || text.toLowerCase() === "menu") {
+            await handleShowMenu(chatId, activeClerkUserId, messageId);
+            return NextResponse.json({ ok: true });
+        }
+
+        // Handle Command: /start, /help, /bantuan
         if (text === "/start" || text === "/help" || text === "/bantuan") {
-            const welcomeText = `👋 <b>Halo! Akun Budgetly Anda Sudah Terhubung!</b>
-👤 ID: <code>${activeClerkUserId}</code>
-
-💡 <b>Cara Penggunaan:</b>
-
-1️⃣ <b>Transfer Antar Rekening / E-Wallet:</b>
-• <i>"tf ke gopay dari jago 50rb"</i>
-• <i>"transfer 100k dari bca ke seabank"</i>
-• <i>"top up ovo dari bca 25rb admin 1000"</i>
-👉 <i>(Saldo pengirim otomatis berkurang, dan penerima bertambah!)</i>
-
-2️⃣ <b>Pengeluaran / Pemasukan Teks:</b>
-• <i>"makan siang geprek 25rb pake bca"</i>
-• <i>"bensin 35k tunai"</i>
-• <i>"gaji bulanan 10jt masuk mandiri"</i>
-
-3️⃣ <b>Bisa Catat Tanggal Lampau (Kemarin, Lusa, dll):</b>
-• <i>"kemarin saya makan bakso 25rb pake bca"</i>
-• <i>"kemarin keluar 50rb buat bensin"</i>
-• <i>"2 hari lalu tf ke gopay dari bca 100rb"</i>
-👉 <i>(Tanggal otomatis disesuaikan ke kemarin / hari lampau!)</i>
-
-4️⃣ <b>Kirim Foto Struk / QRIS / Bukti Transfer:</b>
-• Langsung kirim foto screenshot QRIS atau bukti transfer!
-• AI otomatis mendeteksi nominal, merchant, dan rekening pengeluaran.
-
-📊 <b>Perintah Tambahan:</b>
-• /riwayat - Lihat 10 transaksi terakhir
-• /saldo - Cek rincian saldo semua rekening & e-wallet
-• /rekap - Ringkasan pemasukan & pengeluaran bulan ini
-• /status - Cek status akun Anda
-• /logout - Putuskan koneksi akun`;
-
-            await sendTelegramMessage(chatId, welcomeText, messageId);
+            await handleShowHelp(chatId, activeClerkUserId, messageId);
             return NextResponse.json({ ok: true });
         }
 
@@ -383,82 +988,39 @@ Bot ini dapat membantu Anda mencatat keuangan secara otomatis ke dashboard Budge
 
         // Handle Command: /saldo
         if (text === "/saldo") {
-            await sendChatAction(chatId, "typing");
-            const transactions = await db.transaction.findMany({
-                where: { userId: activeClerkUserId },
-            });
-
-            const balances = transactions.reduce((acc, t) => {
-                const accName = t.account || "Lainnya";
-                const amt = Number(t.amount) || 0;
-                if (!acc[accName]) acc[accName] = 0;
-                if (t.type === "income") {
-                    acc[accName] += amt;
-                } else {
-                    acc[accName] -= amt;
-                }
-                return acc;
-            }, {} as Record<string, number>);
-
-            const nonZeroAccounts = Object.entries(balances)
-                .filter(([, bal]) => bal !== 0)
-                .sort((a, b) => b[1] - a[1]);
-
-            const totalBalance = Object.values(balances).reduce((sum, b) => sum + b, 0);
-
-            if (nonZeroAccounts.length === 0) {
-                await sendTelegramMessage(
-                    chatId,
-                    "🏦 <b>Saldo Akun Budgetly</b>\n\nBelum ada saldo transaksi yang tercatat di akun Anda.",
-                    messageId
-                );
-                return NextResponse.json({ ok: true });
-            }
-
-            let msg = `🏦 <b>Rincian Saldo Akun Budgetly:</b>\n\n`;
-            for (const [accName, bal] of nonZeroAccounts) {
-                msg += `• <b>${accName}</b>: <code>${formatRupiah(bal)}</code>\n`;
-            }
-            msg += `\n💰 <b>Total Saldo:</b> <code>${formatRupiah(totalBalance)}</code>`;
-
-            await sendTelegramMessage(chatId, msg, messageId);
+            await handleShowSaldo(chatId, activeClerkUserId, messageId);
             return NextResponse.json({ ok: true });
         }
 
         // Handle Command: /rekap
         if (text === "/rekap") {
-            await sendChatAction(chatId, "typing");
-            const now = new Date();
-            const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+            await handleShowRekap(chatId, activeClerkUserId, messageId);
+            return NextResponse.json({ ok: true });
+        }
 
-            const transactions = await db.transaction.findMany({
-                where: {
-                    userId: activeClerkUserId,
-                    date: { gte: firstDayOfMonth },
-                },
-            });
-
-            let incomeTotal = 0;
-            let expenseTotal = 0;
-
-            for (const t of transactions) {
-                if (t.type === "income") incomeTotal += Number(t.amount) || 0;
-                else expenseTotal += Number(t.amount) || 0;
+        // Handle Command: /revisi [koreksi]
+        const revisiMatch = text.match(/^\/revisi(?:\s+(.+))?$/i);
+        if (revisiMatch) {
+            const revisionArg = revisiMatch[1]?.trim();
+            if (!revisionArg) {
+                await handleShowRevisiPrompt(chatId, activeClerkUserId, messageId);
+            } else if (revisionArg.toLowerCase() === "hapus" || revisionArg.toLowerCase() === "batal") {
+                await handleDeleteTransaction(chatId, activeClerkUserId, undefined, messageId);
+            } else {
+                await handlePerformRevision(chatId, activeClerkUserId, revisionArg, messageId);
             }
+            return NextResponse.json({ ok: true });
+        }
 
-            const monthNames = [
-                "Januari", "Februari", "Maret", "April", "Mei", "Juni",
-                "Juli", "Agustus", "September", "Oktober", "November", "Desember"
-            ];
-            const currentMonthName = monthNames[now.getMonth()];
-
-            const rekapMsg = `📊 <b>Rekap Bulan ${currentMonthName} ${now.getFullYear()}</b>\n\n` +
-                `🟢 <b>Pemasukan:</b> <code>${formatRupiah(incomeTotal)}</code>\n` +
-                `🔴 <b>Pengeluaran:</b> <code>${formatRupiah(expenseTotal)}</code>\n` +
-                `💵 <b>Selisih (Net):</b> <code>${formatRupiah(incomeTotal - expenseTotal)}</code>\n\n` +
-                `📝 Total: ${transactions.length} transaksi`;
-
-            await sendTelegramMessage(chatId, rekapMsg, messageId);
+        // Handle Pesan yang diawali kata "revisi:" atau "ralat:"
+        const ralatPrefixMatch = text.match(/^(?:revisi|ralat)\s*[:\-]?\s+(.+)$/i);
+        if (ralatPrefixMatch) {
+            const instruction = ralatPrefixMatch[1].trim();
+            if (instruction.toLowerCase() === "hapus" || instruction.toLowerCase() === "batal") {
+                await handleDeleteTransaction(chatId, activeClerkUserId, undefined, messageId);
+            } else {
+                await handlePerformRevision(chatId, activeClerkUserId, instruction, messageId);
+            }
             return NextResponse.json({ ok: true });
         }
 
@@ -585,9 +1147,10 @@ KEMBALIKAN HANYA JSON MURNI TANPA BACKTICK, TANPA MARKDOWN.`;
                     `📤 <b>Keluar:</b> <code>${formatRupiah(amount)}</code> (${fromAcc})\n` +
                     `📥 <b>Masuk:</b> <code>${formatRupiah(amount)}</code> (${toAcc})\n` +
                     `📁 <b>Kategori:</b> Top Up & Tabungan\n` +
-                    `📅 <b>Tanggal:</b> ${formatTanggalIndo(transDate)}`;
+                    `📅 <b>Tanggal:</b> ${formatTanggalIndo(transDate)}\n\n` +
+                    `💡 <i>Salah ketik? Ketik /revisi untuk perbaiki atau membatalkan.</i>`;
 
-                await sendTelegramMessage(chatId, replyMsg, messageId);
+                await sendTelegramMessage(chatId, replyMsg, messageId, QUICK_REVISI_KEYBOARD);
                 return NextResponse.json({ ok: true });
             }
 
@@ -614,9 +1177,10 @@ KEMBALIKAN HANYA JSON MURNI TANPA BACKTICK, TANPA MARKDOWN.`;
                 `💰 <b>Nominal:</b> <code>${formatRupiah(amount)}</code>\n` +
                 `🏦 <b>Akun:</b> ${account}\n` +
                 `📁 <b>Kategori:</b> ${category}\n` +
-                `📅 <b>Tanggal:</b> ${formatTanggalIndo(transDate)}`;
+                `📅 <b>Tanggal:</b> ${formatTanggalIndo(transDate)}\n\n` +
+                `💡 <i>Salah ketik? Ketik /revisi untuk perbaiki atau membatalkan.</i>`;
 
-            await sendTelegramMessage(chatId, replyMsg, messageId);
+            await sendTelegramMessage(chatId, replyMsg, messageId, QUICK_REVISI_KEYBOARD);
             return NextResponse.json({ ok: true });
         }
 
@@ -646,14 +1210,22 @@ ATURAN TANGGAL & WAKTU:
 - Masukkan ke field "date" dalam format "YYYY-MM-DD".
 
 KEMUNGKINAN INTENT:
-1. "history": Jika user meminta melihat riwayat, transaksi terakhir, catatan keuangan lalu.
+1. "revision": Jika pengguna bermaksud merevisi, meralat, atau mengoreksi transaksi terakhirnya karena salah ketik, salah nominal, salah akun, atau salah catat.
+   Contoh: "ralat tadi 35rb", "eh salah nominalnya 50000", "salah tadi pake BCA bukan Jago", "revisi ganti jadi 25rb"
+   Format JSON:
+   {
+     "action": "revision",
+     "instruction": string (instruksi koreksi dari pengguna)
+   }
+
+2. "history": Jika user meminta melihat riwayat, transaksi terakhir, catatan keuangan lalu.
    Contoh: "lihat riwayat", "riwayat terakhir", "history transaksi", "rekap transaksi terakhir", "transaksi kemaren kemaren"
    Format JSON:
    {
      "action": "history"
    }
 
-2. "transfer": Pemindahan dana, top-up, setor tunai, tarik tunai, tukar uang, atau tf antar akun/rekening/dompet digital/uang tunai.
+3. "transfer": Pemindahan dana, top-up, setor tunai, tarik tunai, tukar uang, atau tf antar akun/rekening/dompet digital/uang tunai.
    Contoh:
    - "tf ke gopay dari jago 50rb" -> fromAccount: "Jago", toAccount: "GoPay"
    - "kemarin transfer dari bca ke jago 100k" -> fromAccount: "BCA", toAccount: "Jago"
@@ -673,7 +1245,7 @@ KEMUNGKINAN INTENT:
      "date": string (format YYYY-MM-DD)
    }
 
-3. "single": Catatan pengeluaran atau pemasukan biasa (bukan transfer antar akun).
+4. "single": Catatan pengeluaran atau pemasukan biasa (bukan transfer antar akun).
    - Pemasukan (type: "income"):
      Contoh: "gaji 10jt masuk mandiri", "ada uang masuk 100rb ke jago dari teman", "dapat bonus 200k di bca"
    - Pengeluaran (type: "expense"):
@@ -689,7 +1261,7 @@ KEMUNGKINAN INTENT:
      "date": string (format YYYY-MM-DD)
    }
 
-4. "chat": Jika pesan hanya sapaan atau percakapan biasa dan bukan transaksi keuangan.
+5. "chat": Jika pesan hanya sapaan atau percakapan biasa dan bukan transaksi keuangan.
    Format JSON:
    {
      "action": "chat",
@@ -721,6 +1293,12 @@ KEMBALIKAN HANYA JSON MURNI TANPA BACKTICK, TANPA MARKDOWN.`;
                 return NextResponse.json({ ok: true });
             }
 
+            // Jika action == "revision"
+            if (parsed.action === "revision") {
+                await handlePerformRevision(chatId, activeClerkUserId, parsed.instruction || text, messageId);
+                return NextResponse.json({ ok: true });
+            }
+
             // Jika action == "history"
             if (parsed.action === "history") {
                 await handleShowHistory(chatId, activeClerkUserId, messageId);
@@ -729,7 +1307,7 @@ KEMBALIKAN HANYA JSON MURNI TANPA BACKTICK, TANPA MARKDOWN.`;
 
             // Jika action == "chat"
             if (parsed.action === "chat") {
-                await sendTelegramMessage(chatId, parsed.reply || "Halo! Ada yang bisa saya bantu catat hari ini?", messageId);
+                await sendTelegramMessage(chatId, parsed.reply || "Halo! Ada yang bisa saya bantu catat hari ini? Ketik '/' untuk melihat menu.", messageId, MAIN_MENU_KEYBOARD);
                 return NextResponse.json({ ok: true });
             }
 
@@ -799,9 +1377,9 @@ KEMBALIKAN HANYA JSON MURNI TANPA BACKTICK, TANPA MARKDOWN.`;
                 }
                 replyMsg += `📁 <b>Kategori:</b> Top Up & Tabungan\n` +
                     `📅 <b>Tanggal:</b> ${formatTanggalIndo(transDate)}\n\n` +
-                    `💡 <i>Saldo di ${fromAccount} otomatis berkurang dan di ${toAccount} bertambah.</i>`;
+                    `💡 <i>Salah ketik? Ketik /revisi untuk perbaiki atau membatalkan.</i>`;
 
-                await sendTelegramMessage(chatId, replyMsg, messageId);
+                await sendTelegramMessage(chatId, replyMsg, messageId, QUICK_REVISI_KEYBOARD);
                 return NextResponse.json({ ok: true });
             }
 
@@ -835,9 +1413,10 @@ KEMBALIKAN HANYA JSON MURNI TANPA BACKTICK, TANPA MARKDOWN.`;
                     `💰 <b>Nominal:</b> <code>${formatRupiah(amount)}</code>\n` +
                     `🏦 <b>Akun:</b> ${account}\n` +
                     `📁 <b>Kategori:</b> ${category}\n` +
-                    `📅 <b>Tanggal:</b> ${formatTanggalIndo(transDate)}`;
+                    `📅 <b>Tanggal:</b> ${formatTanggalIndo(transDate)}\n\n` +
+                    `💡 <i>Salah ketik? Ketik /revisi untuk perbaiki atau membatalkan.</i>`;
 
-                await sendTelegramMessage(chatId, replyMsg, messageId);
+                await sendTelegramMessage(chatId, replyMsg, messageId, QUICK_REVISI_KEYBOARD);
                 return NextResponse.json({ ok: true });
             }
         }
