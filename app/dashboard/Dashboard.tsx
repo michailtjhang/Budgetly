@@ -42,6 +42,28 @@ interface Transaction {
     category?: string;
 }
 
+interface Investment {
+    id: number;
+    name: string;
+    platform: string;
+    type: string;
+    amount: number;
+    units?: number;
+    note?: string;
+}
+
+interface Schedule {
+    id: number;
+    name: string;
+    fromAccount: string;
+    toAccount: string;
+    amount: number;
+    dayOfMonth: number;
+    active: boolean;
+}
+
+
+
 const ACCOUNT_OPTIONS = ["BCA", "blu by BCA", "BRI", "BNI", "Mandiri", "BJB", "Permata", "SeaBank", "Jago", "Flip", "GoPay", "ShopeePay", "OVO", "DANA", "Bibit", "Stockbit", "Ajaib", "Superbank", "Bank Saqu", "Krom Bank", "Dana Darurat", "Uang Tunai", "Lainnya"];
 
 const CATEGORY_OPTIONS = [
@@ -142,6 +164,22 @@ export default function Dashboard() {
         return `${MONTHS_ID[parseInt(m) - 1]} ${y}`;
     };
 
+    // 📈 Investasi & Jadwal State
+    const [investments, setInvestments] = useState<Investment[]>([]);
+    const [invName, setInvName] = useState("");
+    const [invPlatform, setInvPlatform] = useState("Bibit");
+    const [invType, setInvType] = useState("Reksa Dana");
+    const [invAmount, setInvAmount] = useState<number | "">("");
+    const [invUnits, setInvUnits] = useState<number | "">("");
+    const [schedules, setSchedules] = useState<Schedule[]>([]);
+    const [schName, setSchName] = useState("");
+    const [schFrom, setSchFrom] = useState("Jago");
+    const [schTo, setSchTo] = useState("Bibit");
+    const [schAmount, setSchAmount] = useState<number | "">("");
+    const [schDay, setSchDay] = useState(1);
+    const [invLoading, setInvLoading] = useState(false);
+    const [schLoading, setSchLoading] = useState(false);
+
     // 📷 Scan Invoice State
     const [showScanModal, setShowScanModal] = useState(false);
     const [scanLoading, setScanLoading] = useState(false);
@@ -167,6 +205,46 @@ export default function Dashboard() {
                 setTransactions([]);
             });
     }, []);
+
+    useEffect(() => {
+        Promise.all([fetch("/api/investments"), fetch("/api/schedules")])
+            .then(async ([investmentRes, scheduleRes]) => {
+                setInvestments(await investmentRes.json());
+                setSchedules(await scheduleRes.json());
+            })
+            .catch(() => {
+                setInvestments([]);
+                setSchedules([]);
+            });
+    }, []);
+
+    const saveInvestment = async () => {
+        if (!invName || !invAmount) return;
+        setInvLoading(true);
+        const res = await fetch("/api/investments", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: invName, platform: invPlatform, type: invType, amount: Number(invAmount), units: invUnits ? Number(invUnits) : undefined }) });
+        if (res.ok) {
+            setInvestments([await res.json(), ...investments]);
+            setInvName(""); setInvAmount(""); setInvUnits("");
+        }
+        setInvLoading(false);
+    };
+
+    const saveSchedule = async () => {
+        if (!schName || !schAmount) return;
+        setSchLoading(true);
+        const res = await fetch("/api/schedules", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: schName, fromAccount: schFrom, toAccount: schTo, amount: Number(schAmount), dayOfMonth: Number(schDay) }) });
+        if (res.ok) {
+            setSchedules([...schedules, await res.json()]);
+            setSchName(""); setSchAmount("");
+        }
+        setSchLoading(false);
+    };
+
+    const deleteSchedule = async (id: number) => {
+        if (!confirm("Hapus jadwal ini?")) return;
+        const res = await fetch(`/api/schedules?id=${id}`, { method: "DELETE" });
+        if (res.ok) setSchedules(schedules.filter((schedule) => schedule.id !== id));
+    };
 
     // 💰 Tambah / Edit Transaksi
     const saveTransaction = async () => {
@@ -613,6 +691,100 @@ export default function Dashboard() {
 
                 {/* Charts Section */}
                 <FinancialChart transactions={filteredByMonth} month={selectedMonth} />
+
+                {/* 📈 Investasi & Jadwal Otomatis Section */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+                        <h3 className="text-lg font-semibold text-gray-800 flex items-center gap-2 mb-4">
+                            <TrendingUp className="w-5 h-5 text-emerald-600" />
+                            Portofolio Investasi
+                        </h3>
+                        <div className="grid grid-cols-2 gap-2 mb-3">
+                            <input value={invName} onChange={(e) => setInvName(e.target.value)} placeholder="Nama (cth: Reksa Dana Sucorinvest)" className="col-span-2 px-3 py-2 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-sm" />
+                            <select value={invPlatform} onChange={(e) => setInvPlatform(e.target.value)} className="px-3 py-2 rounded-xl border border-gray-200 text-sm">
+                                {["Bibit", "Stockbit", "Emas", "Deposito", "Visa Jago", "Lainnya"].map((option) => (
+                                    <option key={option} value={option}>{option}</option>
+                                ))}
+                            </select>
+                            <select value={invType} onChange={(e) => setInvType(e.target.value)} className="px-3 py-2 rounded-xl border border-gray-200 text-sm">
+                                {["Reksa Dana", "Saham", "Emas", "Deposito", "Lainnya"].map((option) => (
+                                    <option key={option} value={option}>{option}</option>
+                                ))}
+                            </select>
+                            <input type="number" value={invAmount} onChange={(e) => setInvAmount(Number(e.target.value))} placeholder="Nilai / saldo (Rp)" className="px-3 py-2 rounded-xl border border-gray-200 focus:outline-none text-sm" />
+                            <input type="number" value={invUnits} onChange={(e) => setInvUnits(Number(e.target.value))} placeholder="Unit (opsional)" className="px-3 py-2 rounded-xl border border-gray-200 focus:outline-none text-sm" />
+                            <button onClick={saveInvestment} disabled={invLoading} className="col-span-2 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-medium text-sm transition-all disabled:opacity-70">
+                                {invLoading ? "Menyimpan..." : "Simpan Portofolio"}
+                            </button>
+                        </div>
+                        {investments.length === 0 ? (
+                            <p className="text-sm text-gray-400 text-center py-4">Belum ada portofolio. Tambahkan Bibit, Stockbit, emas, deposito, atau Visa Jago di atas.</p>
+                        ) : (
+                            <div className="space-y-3">
+                                {investments.map((inves) => (
+                                    <div key={inves.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
+                                        <div>
+                                            <p className="font-semibold text-gray-900 text-sm">{inves.name}</p>
+                                            <p className="text-xs text-gray-500">{inves.platform} • {inves.type}{inves.units ? ` • ${inves.units} unit` : ""}</p>
+                                        </div>
+                                        <div className="flex items-center gap-3">
+                                            <span className="font-bold text-emerald-600 text-sm">Rp {formatRupiah(inves.amount)}</span>
+                                            <button
+                                                onClick={() => { if (confirm("Hapus portofolio ini?")) fetch(`/api/investments/${inves.id}`, { method: "DELETE" }).then((res) => { if (res.ok) setInvestments(investments.filter((item) => item.id !== inves.id)); }); }}
+                                                className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg transition-colors"
+                                                title="Hapus"
+                                            >
+                                                <Trash2 className="w-4 h-4" />
+                                            </button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+                        <h3 className="text-lg font-semibold text-gray-800 flex items-center gap-2 mb-4">
+                            <Calendar className="w-5 h-5 text-indigo-600" />
+                            Jadwal Otomatis
+                        </h3>
+                        <div className="grid grid-cols-2 gap-2 mb-3">
+                            <input value={schName} onChange={(e) => setSchName(e.target.value)} placeholder="Nama (cth: Nabung rutin ke Bibit)" className="col-span-2 px-3 py-2 rounded-xl border border-gray-200 focus:outline-none text-sm" />
+                            <select value={schFrom} onChange={(e) => setSchFrom(e.target.value)} className="px-3 py-2 rounded-xl border border-gray-200 text-sm">
+                                {ACCOUNT_OPTIONS.map((option) => (<option key={option} value={option}>{option}</option>))}
+                            </select>
+                            <select value={schTo} onChange={(e) => setSchTo(e.target.value)} className="px-3 py-2 rounded-xl border border-gray-200 text-sm">
+                                {ACCOUNT_OPTIONS.map((option) => (<option key={option} value={option}>{option}</option>))}
+                            </select>
+                            <input type="number" value={schAmount} onChange={(e) => setSchAmount(Number(e.target.value))} placeholder="Nominal (Rp)" className="px-3 py-2 rounded-xl border border-gray-200 focus:outline-none text-sm" />
+                            <select value={schDay} onChange={(e) => setSchDay(Number(e.target.value))} className="px-3 py-2 rounded-xl border border-gray-200 text-sm">
+                                {Array.from({ length: 28 }, (_, index) => index + 1).map((day) => (
+                                    <option key={day} value={day}>Tanggal {day}</option>
+                                ))}
+                            </select>
+                            <button onClick={saveSchedule} disabled={schLoading} className="col-span-2 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-medium text-sm transition-all disabled:opacity-70">
+                                {schLoading ? "Menyimpan..." : "Simpan Jadwal"}
+                            </button>
+                        </div>
+                        {schedules.length === 0 ? (
+                            <p className="text-sm text-gray-400 text-center py-4">Belum ada jadwal. Buat jadwal auto-catat bulanan seperti dari Jago ke Bibit.</p>
+                        ) : (
+                            <div className="space-y-3">
+                                {schedules.map((schedule) => (
+                                    <div key={schedule.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
+                                        <div>
+                                            <p className="font-semibold text-gray-900 text-sm">{schedule.name}</p>
+                                            <p className="text-xs text-gray-500">Setiap tanggal {schedule.dayOfMonth}: {schedule.fromAccount} → {schedule.toAccount} • Rp {formatRupiah(schedule.amount)}</p>
+                                        </div>
+                                        <button onClick={() => deleteSchedule(schedule.id)} className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg transition-colors" title="Hapus">
+                                            <Trash2 className="w-4 h-4" />
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                </div>
 
                 {/* Main Content Grid */}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">

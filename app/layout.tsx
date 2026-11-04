@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Outfit } from "next/font/google";
 import { ClerkProvider } from "@clerk/nextjs";
+import Script from "next/script";
 import "./globals.css";
 
 const outfit = Outfit({ subsets: ["latin"] });
@@ -45,8 +46,13 @@ export default function RootLayout({
   return (
     <ClerkProvider>
       <html lang="en">
+        <head>
+          <link rel="manifest" href="/manifest.webmanifest" />
+          <meta name="theme-color" content="#4f46e5" />
+        </head>
         <body className={`${outfit.className} bg-gray-50 text-gray-900 antialiased`}>
           {children}
+          <Script id="pwa-register">{"if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js')"}</Script>
         </body>
       </html>
     </ClerkProvider>

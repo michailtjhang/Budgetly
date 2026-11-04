@@ -20,6 +20,34 @@ model Transaction {
   updatedAt   DateTime @updatedAt
 }
 
+model Investment {
+  id        Int       @id @default(autoincrement())
+  userId    String
+  name      String
+  platform  String
+  type      String
+  amount    Float
+  units     Float?
+  note      String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+
+model Schedule {
+  id          Int       @id @default(autoincrement())
+  userId      String
+  name        String
+  fromAccount String
+  toAccount   String
+  amount      Float
+  dayOfMonth  Int
+  category    String    @default("Investasi & Saham")
+  active      Boolean   @default(true)
+  lastRun     DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
 model TelegramUser {
   id               Int      @id @default(autoincrement())
   telegramId       String   @unique
