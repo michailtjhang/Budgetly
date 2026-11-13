@@ -28,6 +28,7 @@ const BOT_COMMANDS = [
     { command: "menu", description: "Buka menu & tombol pintasan" },
     { command: "revisi", description: "Revisi / batalkan transaksi terakhir" },
     { command: "saldo", description: "Cek saldo rekening & e-wallet" },
+    { command: "investasi", description: "Cek portofolio investasi & saham" },
     { command: "rekap", description: "Rekap pengeluaran bulan ini" },
     { command: "riwayat", description: "Lihat 10 transaksi terakhir" },
     { command: "bantuan", description: "Panduan cara penggunaan bot" },
@@ -39,14 +40,17 @@ const MAIN_MENU_KEYBOARD = {
     inline_keyboard: [
         [
             { text: "💳 Cek Saldo", callback_data: "cmd_saldo" },
-            { text: "📊 Rekap Bulan Ini", callback_data: "cmd_rekap" }
+            { text: "📈 Portofolio Investasi", callback_data: "cmd_investasi" }
         ],
         [
-            { text: "📜 10 Riwayat", callback_data: "cmd_riwayat" },
-            { text: "✏️ Revisi Terakhir", callback_data: "cmd_revisi" }
+            { text: "📊 Rekap Bulan Ini", callback_data: "cmd_rekap" },
+            { text: "📜 10 Riwayat", callback_data: "cmd_riwayat" }
         ],
         [
-            { text: "❓ Panduan & Bantuan", callback_data: "cmd_bantuan" },
+            { text: "✏️ Revisi Terakhir", callback_data: "cmd_revisi" },
+            { text: "❓ Panduan & Bantuan", callback_data: "cmd_bantuan" }
+        ],
+        [
             { text: "👤 Status Akun", callback_data: "cmd_status" }
         ]
     ]
@@ -61,6 +65,15 @@ const QUICK_REVISI_KEYBOARD = {
     ]
 };
 
+const INVESTMENT_PLATFORMS = [
+    "Bibit", "Stockbit", "Ajaib", "Pluang", "Bareksa", "Indodax",
+    "TokoCrypto", "Emas", "Deposito", "Visa Jago", "BCA", "Mandiri", "BRI", "Lainnya"
+];
+
+const INVESTMENT_TYPES = [
+    "Reksa Dana", "Saham", "Emas", "Crypto", "Obligasi", "Deposito", "Lainnya"
+];
+
 interface GeminiReceiptResult {
     error?: string;
     isTransfer?: boolean;
@@ -74,7 +87,7 @@ interface GeminiReceiptResult {
 }
 
 interface GeminiTextResult {
-    action?: "transfer" | "single" | "chat" | "history" | "revision";
+    action?: "transfer" | "single" | "chat" | "history" | "revision" | "investment";
     amount?: number;
     adminFee?: number;
     fromAccount?: string;
@@ -86,6 +99,12 @@ interface GeminiTextResult {
     date?: string;
     reply?: string;
     instruction?: string;
+    investmentName?: string;
+    investmentPlatform?: string;
+    investmentType?: string;
+    investmentUnits?: number;
+    fundingAccount?: string;
+    note?: string;
 }
 
 function formatRupiah(amount: number): string {
@@ -279,6 +298,7 @@ async function handleShowMenu(chatId: number | string, clerkUserId: string, mess
     const menuMsg = `📋 <b>Menu Budgetly Assistant</b>\n\n` +
         `Silakan pilih menu di bawah ini atau ketik langsung perintah yang Anda inginkan:\n\n` +
         `• /saldo - Cek rincian saldo rekening & e-wallet\n` +
+        `• /investasi - Cek portofolio investasi & saham\n` +
         `• /rekap - Ringkasan pengeluaran & pemasukan bulan ini\n` +
         `• /riwayat - 10 riwayat transaksi terakhir\n` +
         `• /revisi - Perbaiki atau batalkan transaksi terakhir\n` +
@@ -296,24 +316,31 @@ async function handleShowHelp(chatId: number | string, clerkUserId: string, mess
 
 💡 <b>Cara Penggunaan:</b>
 
-1️⃣ <b>Transfer Antar Rekening / E-Wallet:</b>
-• <i>"tf ke gopay dari jago 50rb"</i>
+1️⃣ <b>Transfer Antar Rekening & Admin Fee:</b>
+• <i>"tf ke jago dari bri 300k ada admin 7500"</i>
 • <i>"transfer 100k dari bca ke seabank"</i>
 • <i>"top up ovo dari bca 25rb admin 1000"</i>
-👉 <i>(Saldo pengirim otomatis berkurang, dan penerima bertambah!)</i>
+👉 <i>(Saldo pengirim terpotong nominal + admin, dan penerima bertambah!)</i>
 
-2️⃣ <b>Pengeluaran / Pemasukan Teks:</b>
+2️⃣ <b>Catat Portofolio Investasi:</b>
+• <i>"investasi bibit reksa dana 500rb"</i>
+• <i>"beli saham bbca di stockbit 1.5jt pake bca"</i>
+• <i>"beli emas antam 2 gram 2.6jt di pegadaian"</i>
+• <i>"beli crypto btc 1jt di indodax pake jago"</i>
+👉 <i>(Portofolio langsung tercatat di menu Investasi Budgetly!)</i>
+
+3️⃣ <b>Pengeluaran / Pemasukan Teks:</b>
 • <i>"makan siang geprek 25rb pake bca"</i>
 • <i>"bensin 35k tunai"</i>
 • <i>"gaji bulanan 10jt masuk mandiri"</i>
 
-3️⃣ <b>Bisa Catat Tanggal Lampau (Kemarin, Lusa, dll):</b>
+4️⃣ <b>Bisa Catat Tanggal Lampau (Kemarin, Lusa, dll):</b>
 • <i>"kemarin saya makan bakso 25rb pake bca"</i>
 • <i>"kemarin keluar 50rb buat bensin"</i>
 • <i>"2 hari lalu tf ke gopay dari bca 100rb"</i>
 👉 <i>(Tanggal otomatis disesuaikan ke kemarin / hari lampau!)</i>
 
-4️⃣ <b>Kirim Foto Struk / QRIS / Bukti Transfer:</b>
+5️⃣ <b>Kirim Foto Struk / QRIS / Bukti Transfer:</b>
 • Langsung kirim foto screenshot QRIS atau bukti transfer!
 • AI otomatis mendeteksi nominal, merchant, dan rekening pengeluaran.
 
@@ -326,14 +353,51 @@ async function handleShowHelp(chatId: number | string, clerkUserId: string, mess
 
 📊 <b>Daftar Perintah (Ketik '/' untuk melihat menu):</b>
 • /menu - Tampilkan tombol menu interaktif
-• /revisi - Perbaiki atau batalkan transaksi terakhir
-• /riwayat - Lihat 10 transaksi terakhir
 • /saldo - Cek rincian saldo rekening & e-wallet
+• /investasi - Cek portofolio investasi & saham
 • /rekap - Ringkasan pengeluaran & pemasukan bulan ini
+• /riwayat - Lihat 10 transaksi terakhir
+• /revisi - Perbaiki atau batalkan transaksi terakhir
 • /status - Cek status akun Anda
 • /logout - Putuskan koneksi akun`;
 
     await sendTelegramMessage(chatId, welcomeText, messageId, MAIN_MENU_KEYBOARD);
+}
+
+// Tampilkan Portofolio Investasi
+async function handleShowInvestments(chatId: number | string, clerkUserId: string, messageId?: number) {
+    await sendChatAction(chatId, "typing");
+    const investments = await db.investment.findMany({
+        where: { userId: clerkUserId },
+        orderBy: { createdAt: "desc" },
+    });
+
+    if (investments.length === 0) {
+        const emptyMsg = `📈 <b>Portofolio Investasi Budgetly</b>\n\n` +
+            `Belum ada portofolio investasi yang tercatat di akun Anda.\n\n` +
+            `💡 <b>Cara Mencatat Investasi lewat Chat:</b>\n` +
+            `• <i>"investasi bibit reksa dana 500rb"</i>\n` +
+            `• <i>"beli saham bbca di stockbit 1.5jt pake bca"</i>\n` +
+            `• <i>"beli emas antam 2 gram 2.6jt di pegadaian"</i>\n` +
+            `• <i>"beli crypto btc 1jt di indodax pake jago"</i>\n\n` +
+            `Portofolio otomatis tersimpan ke dashboard Budgetly Anda!`;
+        await sendTelegramMessage(chatId, emptyMsg, messageId, MAIN_MENU_KEYBOARD);
+        return;
+    }
+
+    const totalPortfolio = investments.reduce((sum, inv) => sum + (Number(inv.amount) || 0), 0);
+
+    let msg = `📈 <b>Portofolio Investasi Anda (${investments.length} Aset):</b>\n\n`;
+    for (const inv of investments) {
+        msg += `• <b>${inv.name}</b> (${inv.platform})\n`;
+        msg += `   🏷️ <i>${inv.type}</i>${inv.units ? ` • <b>${inv.units} unit</b>` : ""}\n`;
+        msg += `   💰 <b>Nilai:</b> <code>${formatRupiah(inv.amount)}</code>\n\n`;
+    }
+    msg += `━━━━━━━━━━━━━━━━━━━\n`;
+    msg += `📊 <b>Total Nilai Portofolio:</b> <code>${formatRupiah(totalPortfolio)}</code>\n\n`;
+    msg += `💡 <i>Catat investasi baru kapan saja dengan mengetik misal: "beli saham bbca 1jt di stockbit"</i>`;
+
+    await sendTelegramMessage(chatId, msg, messageId, MAIN_MENU_KEYBOARD);
 }
 
 // Tampilkan Riwayat 10 Transaksi
@@ -630,6 +694,7 @@ async function handlePerformRevision(chatId: number | string, clerkUserId: strin
 
         const expenseTx = related.find(t => t.type === "expense" && t.description.startsWith("Transfer ke "));
         const incomeTx = related.find(t => t.type === "income" && t.description.startsWith("Transfer dari "));
+        const adminTx = related.find(t => t.type === "expense" && t.category === "Biaya Admin & Pajak");
 
         if (expenseTx && incomeTx) {
             const prompt = `Kamu adalah asisten pencatat keuangan Budgetly.
@@ -639,6 +704,7 @@ DATA TRANSFER SAAT INI:
 - Nominal: ${expenseTx.amount}
 - Dari Akun: ${expenseTx.account}
 - Ke Akun: ${incomeTx.account}
+- Biaya Admin: ${adminTx ? adminTx.amount : 0}
 - Tanggal: ${new Date(expenseTx.date).toISOString().split("T")[0]}
 
 Daftar Akun yang Dikenal: ${ACCOUNT_OPTIONS.join(", ")}
@@ -649,11 +715,13 @@ INSTRUKSI KOREKSI PENGGUNA:
 
 ATURAN REVISI TRANSFER:
 1. Perbarui nilai field yang diminta diubah oleh pengguna. Jika tidak disebutkan, pertahankan data saat ini.
-2. Format JSON MURNI:
+2. Jika pengguna menyebut biaya admin baru (misal "admin 7500", "tanpa admin", "admin 0"), perbarui "adminFee".
+3. Format JSON MURNI:
 {
-  "amount": number (nominal transfer baru),
+  "amount": number (nominal transfer baru tanpa admin),
   "fromAccount": string (akun pengirim),
   "toAccount": string (akun penerima),
+  "adminFee": number (biaya admin, 0 jika tidak ada),
   "date": string (format YYYY-MM-DD)
 }
 
@@ -678,9 +746,10 @@ KEMBALIKAN HANYA JSON MURNI TANPA BACKTICK, TANPA MARKDOWN.`;
                 const newAmount = Number(parsed.amount) || expenseTx.amount;
                 const newFrom = parsed.fromAccount || expenseTx.account || "Lainnya";
                 const newTo = parsed.toAccount || incomeTx.account || "Lainnya";
+                const newAdminFee = parsed.adminFee !== undefined ? Number(parsed.adminFee) : (adminTx ? adminTx.amount : 0);
                 const newDate = parsed.date ? new Date(parsed.date) : expenseTx.date;
 
-                await db.$transaction([
+                const ops: any[] = [
                     db.transaction.update({
                         where: { id: expenseTx.id },
                         data: {
@@ -699,12 +768,55 @@ KEMBALIKAN HANYA JSON MURNI TANPA BACKTICK, TANPA MARKDOWN.`;
                             date: newDate,
                         },
                     }),
-                ]);
+                ];
 
-                const replyMsg = `✏️ <b>Transfer Berhasil Direvisi!</b>\n\n` +
+                if (newAdminFee > 0) {
+                    if (adminTx) {
+                        ops.push(
+                            db.transaction.update({
+                                where: { id: adminTx.id },
+                                data: {
+                                    description: `Biaya Admin Transfer ke ${newTo}`,
+                                    amount: newAdminFee,
+                                    account: newFrom,
+                                    date: newDate,
+                                },
+                            })
+                        );
+                    } else {
+                        ops.push(
+                            db.transaction.create({
+                                data: {
+                                    description: `Biaya Admin Transfer ke ${newTo}`,
+                                    amount: newAdminFee,
+                                    type: "expense",
+                                    account: newFrom,
+                                    category: "Biaya Admin & Pajak",
+                                    date: newDate,
+                                    userId: clerkUserId,
+                                },
+                            })
+                        );
+                    }
+                } else if (adminTx) {
+                    ops.push(
+                        db.transaction.delete({
+                            where: { id: adminTx.id },
+                        })
+                    );
+                }
+
+                await db.$transaction(ops);
+
+                let replyMsg = `✏️ <b>Transfer Berhasil Direvisi!</b>\n\n` +
                     `📤 <b>Keluar:</b> <code>${formatRupiah(newAmount)}</code> (${newFrom})\n` +
-                    `📥 <b>Masuk:</b> <code>${formatRupiah(newAmount)}</code> (${newTo})\n` +
-                    `📅 <b>Tanggal:</b> ${formatTanggalIndo(newDate)}\n\n` +
+                    `📥 <b>Masuk:</b> <code>${formatRupiah(newAmount)}</code> (${newTo})\n`;
+
+                if (newAdminFee > 0) {
+                    replyMsg += `💸 <b>Biaya Admin:</b> <code>${formatRupiah(newAdminFee)}</code> (${newFrom})\n` +
+                        `💳 <b>Total Terpotong:</b> <code>${formatRupiah(newAmount + newAdminFee)}</code>\n`;
+                }
+                replyMsg += `📅 <b>Tanggal:</b> ${formatTanggalIndo(newDate)}\n\n` +
                     `✅ <i>Saldo dan riwayat transfer telah disesuaikan di Budgetly.</i>`;
 
                 await sendTelegramMessage(chatId, replyMsg, messageId, QUICK_REVISI_KEYBOARD);
@@ -855,6 +967,8 @@ export async function POST(req: NextRequest) {
 
             if (data === "cmd_saldo") {
                 await handleShowSaldo(chatId, activeClerkUserId);
+            } else if (data === "cmd_investasi") {
+                await handleShowInvestments(chatId, activeClerkUserId);
             } else if (data === "cmd_rekap") {
                 await handleShowRekap(chatId, activeClerkUserId);
             } else if (data === "cmd_riwayat") {
@@ -989,6 +1103,12 @@ Bot ini dapat membantu Anda mencatat keuangan secara otomatis ke dashboard Budge
         // Handle Command: /saldo
         if (text === "/saldo") {
             await handleShowSaldo(chatId, activeClerkUserId, messageId);
+            return NextResponse.json({ ok: true });
+        }
+
+        // Handle Command: /investasi atau /porto
+        if (text === "/investasi" || text === "/porto" || text === "/portofolio" || text === "/invest") {
+            await handleShowInvestments(chatId, activeClerkUserId, messageId);
             return NextResponse.json({ ok: true });
         }
 
@@ -1226,10 +1346,14 @@ KEMUNGKINAN INTENT:
    }
 
 3. "transfer": Pemindahan dana, top-up, setor tunai, tarik tunai, tukar uang, atau tf antar akun/rekening/dompet digital/uang tunai.
+   Bisa menyertakan biaya admin (misal "ada admin 7500", "admin 2500", "biaya 1000", "kena admin 6500").
    Contoh:
-   - "tf ke gopay dari jago 50rb" -> fromAccount: "Jago", toAccount: "GoPay"
-   - "kemarin transfer dari bca ke jago 100k" -> fromAccount: "BCA", toAccount: "Jago"
-   - "top up shopeepay 20rb pake bca admin 1000" -> fromAccount: "BCA", toAccount: "ShopeePay", adminFee: 1000
+   - "tf ke jago dari bri 300k ada admin 7500" -> action: "transfer", amount: 300000, fromAccount: "BRI", toAccount: "Jago", adminFee: 7500, description: "Transfer ke Jago"
+   - "transfer dari bri ke jago 300rb admin 7500" -> action: "transfer", amount: 300000, fromAccount: "BRI", toAccount: "Jago", adminFee: 7500, description: "Transfer ke Jago"
+   - "tf bri ke jago 300rb kena admin 7500" -> action: "transfer", amount: 300000, fromAccount: "BRI", toAccount: "Jago", adminFee: 7500, description: "Transfer ke Jago"
+   - "tf ke gopay dari jago 50rb" -> action: "transfer", amount: 50000, fromAccount: "Jago", toAccount: "GoPay", adminFee: 0
+   - "kemarin transfer dari bca ke jago 100k" -> action: "transfer", amount: 100000, fromAccount: "BCA", toAccount: "Jago", adminFee: 0
+   - "top up shopeepay 20rb pake bca admin 1000" -> action: "transfer", amount: 20000, fromAccount: "BCA", toAccount: "ShopeePay", adminFee: 1000
    - "kemarin ada uang masuk 50000 ke jago karena tuker uang tunai" -> fromAccount: "Uang Tunai", toAccount: "Jago", description: "Tukar uang tunai ke Jago"
    - "tukar tunai 50rb ke jago" -> fromAccount: "Uang Tunai", toAccount: "Jago"
    - "tarik tunai 100rb dari bca" -> fromAccount: "BCA", toAccount: "Uang Tunai"
@@ -1237,15 +1361,38 @@ KEMUNGKINAN INTENT:
    Format JSON:
    {
      "action": "transfer",
-     "amount": number (angka nominal tanpa titik/koma, misal 50000),
-     "fromAccount": string (pilih akun sumber dari Daftar Akun yang Dikenal, misal "Uang Tunai" atau "Jago"),
-     "toAccount": string (pilih akun tujuan dari Daftar Akun yang Dikenal, misal "Jago" atau "GoPay"),
-     "adminFee": number (jika ada biaya admin, jika tidak ada isi 0),
-     "description": string (keterangan singkat, misal "Tukar uang tunai ke Jago"),
+     "amount": number (angka nominal tanpa biaya admin, misal 300000),
+     "fromAccount": string (pilih akun sumber dari Daftar Akun yang Dikenal, misal "BRI"),
+     "toAccount": string (pilih akun tujuan dari Daftar Akun yang Dikenal, misal "Jago"),
+     "adminFee": number (jika ada biaya admin isi angka misal 7500, jika tidak ada isi 0),
+     "description": string (keterangan singkat, misal "Transfer ke Jago"),
      "date": string (format YYYY-MM-DD)
    }
 
-4. "single": Catatan pengeluaran atau pemasukan biasa (bukan transfer antar akun).
+4. "investment": Pencatatan portofolio investasi / pembelian aset investasi seperti saham, reksa dana, emas, crypto, obligasi, deposito, SBN.
+   Contoh:
+   - "investasi bibit reksa dana 500rb" -> investmentName: "Reksa Dana", investmentPlatform: "Bibit", investmentType: "Reksa Dana", amount: 500000
+   - "beli saham bbca di stockbit 1.5jt pake bca" -> investmentName: "BBCA", investmentPlatform: "Stockbit", investmentType: "Saham", amount: 1500000, fundingAccount: "BCA"
+   - "investasi emas 500k di pegadaian" -> investmentName: "Emas", investmentPlatform: "Emas", investmentType: "Emas", amount: 500000
+   - "beli crypto btc 1jt di indodax pake jago" -> investmentName: "Bitcoin", investmentPlatform: "Indodax", investmentType: "Crypto", amount: 1000000, fundingAccount: "Jago"
+   - "nabung saham 500rb di ajaib" -> investmentName: "Saham", investmentPlatform: "Ajaib", investmentType: "Saham", amount: 500000
+   - "beli 10 lot bbri di ajaib 4.5jt pake mandiri" -> investmentName: "BBRI", investmentPlatform: "Ajaib", investmentType: "Saham", amount: 4500000, investmentUnits: 10, fundingAccount: "Mandiri"
+   - "beli emas antam 2 gram 2.6jt di bca" -> investmentName: "Emas Antam", investmentPlatform: "Emas", investmentType: "Emas", amount: 2600000, investmentUnits: 2, fundingAccount: "BCA"
+   - "investasi sbn sr021 2jt di bca" -> investmentName: "SBN SR021", investmentPlatform: "BCA", investmentType: "Obligasi", amount: 2000000, fundingAccount: "BCA"
+   Format JSON:
+   {
+     "action": "investment",
+     "investmentName": string (nama aset / emiten / produk, misal "BBCA", "Reksa Dana Sucorinvest", "Emas Antam", "Bitcoin"),
+     "investmentPlatform": string (pilih platform: "Bibit", "Stockbit", "Ajaib", "Emas", "Deposito", "Visa Jago", "Pluang", "Bareksa", "Indodax", "BCA", "Mandiri", "BRI", "Lainnya"),
+     "investmentType": string (pilih salah satu: "Reksa Dana", "Saham", "Emas", "Crypto", "Obligasi", "Deposito", "Lainnya"),
+     "amount": number (nominal rupiah yang diinvestasikan, misal 500000),
+     "investmentUnits": number (opsional, jumlah unit/lot/gram jika disebutkan, jika tidak ada isi null),
+     "fundingAccount": string (opsional, nama rekening/e-wallet sumber dana jika disebutkan misal "pake bca" -> "BCA", jika tidak ada isi null),
+     "note": string (opsional, catatan tambahan),
+     "date": string (format YYYY-MM-DD)
+   }
+
+5. "single": Catatan pengeluaran atau pemasukan biasa (bukan transfer antar akun, bukan investasi).
    - Pemasukan (type: "income"):
      Contoh: "gaji 10jt masuk mandiri", "ada uang masuk 100rb ke jago dari teman", "dapat bonus 200k di bca"
    - Pengeluaran (type: "expense"):
@@ -1261,7 +1408,7 @@ KEMUNGKINAN INTENT:
      "date": string (format YYYY-MM-DD)
    }
 
-5. "chat": Jika pesan hanya sapaan atau percakapan biasa dan bukan transaksi keuangan.
+6. "chat": Jika pesan hanya sapaan atau percakapan biasa dan bukan transaksi keuangan.
    Format JSON:
    {
      "action": "chat",
@@ -1373,13 +1520,87 @@ KEMBALIKAN HANYA JSON MURNI TANPA BACKTICK, TANPA MARKDOWN.`;
                     `📥 <b>Masuk:</b> <code>${formatRupiah(amount)}</code> ke <b>${toAccount}</b>\n`;
 
                 if (adminFee > 0) {
-                    replyMsg += `💸 <b>Biaya Admin:</b> <code>${formatRupiah(adminFee)}</code>\n`;
+                    replyMsg += `💸 <b>Biaya Admin:</b> <code>${formatRupiah(adminFee)}</code> <i>(terpotong dari ${fromAccount})</i>\n` +
+                        `💳 <b>Total Terpotong dari ${fromAccount}:</b> <code>${formatRupiah(amount + adminFee)}</code>\n`;
                 }
                 replyMsg += `📁 <b>Kategori:</b> Top Up & Tabungan\n` +
                     `📅 <b>Tanggal:</b> ${formatTanggalIndo(transDate)}\n\n` +
                     `💡 <i>Salah ketik? Ketik /revisi untuk perbaiki atau membatalkan.</i>`;
 
                 await sendTelegramMessage(chatId, replyMsg, messageId, QUICK_REVISI_KEYBOARD);
+                return NextResponse.json({ ok: true });
+            }
+
+            // Jika action == "investment"
+            if (parsed.action === "investment") {
+                const amount = Number(parsed.amount) || 0;
+                if (amount <= 0) {
+                    await sendTelegramMessage(chatId, "⚠️ Nominal investasi tidak boleh 0.", messageId);
+                    return NextResponse.json({ ok: true });
+                }
+
+                const name = parsed.investmentName || "Investasi";
+                const platform = parsed.investmentPlatform && INVESTMENT_PLATFORMS.includes(parsed.investmentPlatform) ? parsed.investmentPlatform : (parsed.investmentPlatform || "Lainnya");
+                const type = parsed.investmentType && INVESTMENT_TYPES.includes(parsed.investmentType) ? parsed.investmentType : "Lainnya";
+                const units = parsed.investmentUnits && parsed.investmentUnits > 0 ? Number(parsed.investmentUnits) : null;
+                const fundingAccount = parsed.fundingAccount && ACCOUNT_OPTIONS.includes(parsed.fundingAccount) ? parsed.fundingAccount : null;
+
+                // 1. Simpan ke database portofolio investasi
+                await db.investment.create({
+                    data: {
+                        userId: activeClerkUserId,
+                        name,
+                        platform,
+                        type,
+                        amount,
+                        units: units ?? undefined,
+                        note: parsed.note || null,
+                    },
+                });
+
+                // 2. Jika sumber rekening disebutkan, catat juga sebagai pengeluaran agar saldo rekening terpotong
+                if (fundingAccount) {
+                    await db.transaction.create({
+                        data: {
+                            description: `Investasi ${name} (${platform})`,
+                            amount,
+                            type: "expense",
+                            account: fundingAccount,
+                            category: "Investasi & Saham",
+                            date: transDate,
+                            userId: activeClerkUserId,
+                        },
+                    });
+                }
+
+                let replyMsg = `📈 <b>Portofolio Investasi Berhasil Dicatat!</b>\n\n` +
+                    `🏷️ <b>Aset / Produk:</b> <b>${name}</b>\n` +
+                    `🏢 <b>Platform:</b> ${platform}\n` +
+                    `📊 <b>Tipe:</b> ${type}\n` +
+                    `💰 <b>Nilai Investasi:</b> <code>${formatRupiah(amount)}</code>\n`;
+
+                if (units) {
+                    replyMsg += `📦 <b>Jumlah Unit:</b> ${units}\n`;
+                }
+                if (fundingAccount) {
+                    replyMsg += `🏦 <b>Sumber Dana:</b> Terpotong dari <b>${fundingAccount}</b> (Kategori: Investasi & Saham)\n`;
+                }
+                replyMsg += `📅 <b>Tanggal:</b> ${formatTanggalIndo(transDate)}\n\n` +
+                    `✅ <i>Portofolio telah tersimpan ke Budgetly. Ketik /investasi untuk melihat daftar aset Anda.</i>`;
+
+                const invKeyboard = {
+                    inline_keyboard: [
+                        [
+                            { text: "📈 Cek Portofolio", callback_data: "cmd_investasi" },
+                            { text: "💳 Cek Saldo", callback_data: "cmd_saldo" }
+                        ],
+                        [
+                            { text: "📋 Menu Utama", callback_data: "cmd_menu" }
+                        ]
+                    ]
+                };
+
+                await sendTelegramMessage(chatId, replyMsg, messageId, invKeyboard);
                 return NextResponse.json({ ok: true });
             }
 

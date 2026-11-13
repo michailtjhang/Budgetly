@@ -1,10 +1,15 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenAI } from "@google/genai";
+import type { Interactions } from "@google/genai";
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || "";
 export const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+export const genAIv2 = GEMINI_API_KEY ? new GoogleGenAI({ apiKey: GEMINI_API_KEY }) : null;
 
-// Model prioritas (gemini-3.8-flash adalah model generasi terbaru yang direkomendasikan Google)
+// Model prioritas (gemini-4-hydrogen model eksperimental terbaru diutamakan, dengan fallback ke gemini-3.8-flash)
 const PREFERRED_MODELS = [
+    "models/gemini-4-hydrogen",
+    "gemini-4-hydrogen",
     "gemini-3.8-flash",
     "gemini-3.8-flash-lite",
     "gemini-3.8-pro",
@@ -45,7 +50,8 @@ export async function getCandidateGeminiModels(): Promise<string[]> {
 
                 // Urutkan berdasarkan preferensi
                 for (const p of PREFERRED_MODELS) {
-                    if (validModels.includes(p) && !blacklistedModels.has(p) && !candidates.includes(p)) {
+                    const cleanP = p.replace("models/", "");
+                    if ((validModels.includes(cleanP) || p.includes("gemini-4-hydrogen")) && !blacklistedModels.has(p) && !candidates.includes(p)) {
                         candidates.push(p);
                     }
                 }
@@ -69,12 +75,12 @@ export async function getCandidateGeminiModels(): Promise<string[]> {
         }
     }
 
-    // Selalu pastikan minimal gemini-3.8-flash ada di antrean
-    if (!candidates.includes("gemini-3.8-flash") && !blacklistedModels.has("gemini-3.8-flash")) {
-        candidates.unshift("gemini-3.8-flash");
+    // Pastikan models/gemini-4-hydrogen dan gemini-3.8-flash tetap ada di antrean
+    if (!candidates.includes("models/gemini-4-hydrogen") && !blacklistedModels.has("models/gemini-4-hydrogen")) {
+        candidates.unshift("models/gemini-4-hydrogen");
     }
 
-    return candidates.length > 0 ? candidates : ["gemini-3.8-flash"];
+    return candidates.length > 0 ? candidates : ["models/gemini-4-hydrogen", "gemini-3.8-flash"];
 }
 
 export async function getAvailableGeminiModel(): Promise<string> {
@@ -93,23 +99,74 @@ export type GenerateContentInput = Parameters<
 /**
  * Memanggil Gemini API dengan retry dan fallback otomatis ke model lain
  * jika terjadi error 404 / deprecated / unavailable pada model tertentu.
+ * Mendukung SDK @google/genai baru (Interactions API / gemini-4-hydrogen) serta fallback @google/generative-ai.
  */
-export async function generateGeminiContent(contents: GenerateContentInput): Promise<string> {
+export async function generateGeminiContent(contents: GenerateContentInput | string): Promise<string> {
     const candidates = await getCandidateGeminiModels();
     let lastError: unknown = null;
 
-    for (const modelName of candidates) {
+    for (const rawModelName of candidates) {
+        const modelName = rawModelName;
+        const normalizedName = rawModelName.replace(/^models\//, "");
+
+        // 1. Coba gunakan @google/genai Interactions API (khusus teks & model gemini-4-hydrogen / models baru)
+        if (typeof contents === "string" && genAIv2 && (rawModelName.includes("gemini-4-hydrogen") || rawModelName.includes("hydrogen"))) {
+            try {
+                const tools: Interactions.Tool[] = [
+                    {
+                        type: "google_search" as any,
+                    },
+                ];
+
+                const interaction = await genAIv2.interactions.create({
+                    model: rawModelName.startsWith("models/") ? rawModelName : `models/${rawModelName}`,
+                    input: contents,
+                    tools: tools,
+                    generation_config: {
+                        max_output_tokens: 65536,
+                        thinking_level: "high" as any,
+                    },
+                });
+
+                const lastStep = interaction.steps?.at(-1) as any;
+                if (lastStep) {
+                    if (typeof lastStep.text === "string" && lastStep.text.trim()) {
+                        cachedGeminiModel = rawModelName;
+                        return lastStep.text.trim();
+                    }
+                    if (Array.isArray(lastStep.content)) {
+                        const extracted = lastStep.content
+                            .map((c: any) => c.parts?.map((p: any) => p.text || "").join("") || "")
+                            .join("")
+                            .trim();
+                        if (extracted) {
+                            cachedGeminiModel = rawModelName;
+                            return extracted;
+                        }
+                    }
+                }
+            } catch (interactionErr: unknown) {
+                const errMsg = interactionErr instanceof Error ? interactionErr.message : String(interactionErr);
+                console.warn(`[Gemini GenAIv2 Interaction] Model ${rawModelName} gagal: ${errMsg}. Mencoba generateContent fallback...`);
+                // Blacklist model ini jika not found / permission / unhandled
+                if (errMsg.includes("404") || errMsg.includes("not found") || errMsg.includes("400") || errMsg.includes("403")) {
+                    blacklistedModels.add(rawModelName);
+                }
+            }
+        }
+
+        // 2. Fallback standar via generateContent (@google/generative-ai)
         try {
-            const model = genAI.getGenerativeModel({ model: modelName });
-            const result = await model.generateContent(contents);
+            const model = genAI.getGenerativeModel({ model: normalizedName });
+            const result = await model.generateContent(contents as any);
             const text = result.response.text().trim();
 
             // Berhasil! Tandai model ini sebagai model aktif
-            cachedGeminiModel = modelName;
+            cachedGeminiModel = normalizedName;
             return text;
         } catch (err: unknown) {
             const errMsg = err instanceof Error ? err.message : String(err);
-            console.warn(`[Gemini] Model ${modelName} gagal: ${errMsg}. Mencoba model alternatif...`);
+            console.warn(`[Gemini] Model ${normalizedName} gagal: ${errMsg}. Mencoba model alternatif...`);
             lastError = err;
 
             // Jika error 404, not found, deprecated, atau unsupported -> blacklist model ini
@@ -119,8 +176,9 @@ export async function generateGeminiContent(contents: GenerateContentInput): Pro
                 errMsg.includes("no longer available") ||
                 errMsg.includes("not supported")
             ) {
-                blacklistedModels.add(modelName);
-                if (cachedGeminiModel === modelName) {
+                blacklistedModels.add(rawModelName);
+                blacklistedModels.add(normalizedName);
+                if (cachedGeminiModel === rawModelName || cachedGeminiModel === normalizedName) {
                     cachedGeminiModel = null;
                 }
             }
