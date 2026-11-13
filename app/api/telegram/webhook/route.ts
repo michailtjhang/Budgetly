@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { generateGeminiContent } from "@/lib/gemini";
 
@@ -749,7 +750,7 @@ KEMBALIKAN HANYA JSON MURNI TANPA BACKTICK, TANPA MARKDOWN.`;
                 const newAdminFee = parsed.adminFee !== undefined ? Number(parsed.adminFee) : (adminTx ? adminTx.amount : 0);
                 const newDate = parsed.date ? new Date(parsed.date) : expenseTx.date;
 
-                const ops: any[] = [
+                const ops: Prisma.PrismaPromise<unknown>[] = [
                     db.transaction.update({
                         where: { id: expenseTx.id },
                         data: {

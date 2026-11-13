@@ -106,7 +106,6 @@ export async function generateGeminiContent(contents: GenerateContentInput | str
     let lastError: unknown = null;
 
     for (const rawModelName of candidates) {
-        const modelName = rawModelName;
         const normalizedName = rawModelName.replace(/^models\//, "");
 
         // 1. Coba gunakan @google/genai Interactions API (khusus teks & model gemini-4-hydrogen / models baru)
@@ -114,7 +113,7 @@ export async function generateGeminiContent(contents: GenerateContentInput | str
             try {
                 const tools: Interactions.Tool[] = [
                     {
-                        type: "google_search" as any,
+                        type: "google_search",
                     },
                 ];
 
@@ -124,19 +123,27 @@ export async function generateGeminiContent(contents: GenerateContentInput | str
                     tools: tools,
                     generation_config: {
                         max_output_tokens: 65536,
-                        thinking_level: "high" as any,
+                        thinking_level: "high",
                     },
                 });
 
-                const lastStep = interaction.steps?.at(-1) as any;
-                if (lastStep) {
-                    if (typeof lastStep.text === "string" && lastStep.text.trim()) {
+                const lastStep = interaction.steps?.at(-1);
+                if (lastStep && typeof lastStep === "object") {
+                    const stepRecord = lastStep as Record<string, unknown>;
+                    if (typeof stepRecord.text === "string" && stepRecord.text.trim()) {
                         cachedGeminiModel = rawModelName;
-                        return lastStep.text.trim();
+                        return stepRecord.text.trim();
                     }
-                    if (Array.isArray(lastStep.content)) {
-                        const extracted = lastStep.content
-                            .map((c: any) => c.parts?.map((p: any) => p.text || "").join("") || "")
+                    if (Array.isArray(stepRecord.content)) {
+                        const extracted = stepRecord.content
+                            .map((c: unknown) => {
+                                if (c && typeof c === "object" && "parts" in c && Array.isArray((c as { parts: unknown[] }).parts)) {
+                                    return (c as { parts: { text?: string }[] }).parts
+                                        .map((p) => p.text || "")
+                                        .join("");
+                                }
+                                return "";
+                            })
                             .join("")
                             .trim();
                         if (extracted) {
@@ -158,7 +165,7 @@ export async function generateGeminiContent(contents: GenerateContentInput | str
         // 2. Fallback standar via generateContent (@google/generative-ai)
         try {
             const model = genAI.getGenerativeModel({ model: normalizedName });
-            const result = await model.generateContent(contents as any);
+            const result = await model.generateContent(contents as GenerateContentInput);
             const text = result.response.text().trim();
 
             // Berhasil! Tandai model ini sebagai model aktif
