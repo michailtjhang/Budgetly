@@ -28,7 +28,10 @@ import {
     Sparkles,
     AlertCircle,
     Send,
-    Copy
+    Copy,
+    Home,
+    User,
+    Bell
 } from "lucide-react";
 import FinancialChart from "@/components/FinancialChart";
 
@@ -87,6 +90,57 @@ const CATEGORY_OPTIONS = [
 ];
 
 export default function Dashboard() {
+    // PWA (standalone) terdeteksi -> pakai tampilan ala aplikasi mobile; browser biasa tetap tampilan lama
+    const [isApp, setIsApp] = useState(false);
+    useEffect(() => {
+        const mq = window.matchMedia("(display-mode: standalone)");
+        const check = () => setIsApp(mq.matches || (navigator as unknown as { standalone?: boolean }).standalone === true);
+        check();
+        mq.addEventListener("change", check);
+        return () => mq.removeEventListener("change", check);
+    }, []);
+    const showTab = (t: string) => !isApp || tab === t;
+
+    // 🔔 Push Notification
+    const [notifState, setNotifState] = useState<"unsupported" | "off" | "on" | "denied">("off");
+    const [notifBusy, setNotifBusy] = useState(false);
+    useEffect(() => {
+        if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) { setNotifState("unsupported"); return; }
+        if (Notification.permission === "denied") { setNotifState("denied"); return; }
+        navigator.serviceWorker.ready.then((reg) => reg.pushManager.getSubscription()).then((sub) => setNotifState(sub ? "on" : "off")).catch(() => {});
+    }, []);
+    const toggleNotifications = async () => {
+        setNotifBusy(true);
+        try {
+            const reg = await navigator.serviceWorker.ready;
+            const existing = await reg.pushManager.getSubscription();
+            if (existing) {
+                await fetch("/api/push/subscribe", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ endpoint: existing.endpoint }) });
+                await existing.unsubscribe();
+                setNotifState("off");
+            } else {
+                const perm = await Notification.requestPermission();
+                if (perm !== "granted") { setNotifState(perm === "denied" ? "denied" : "off"); return; }
+                const key = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || "";
+                const pad = "=".repeat((4 - (key.length % 4)) % 4);
+                const raw = atob((key + pad).replace(/-/g, "+").replace(/_/g, "/"));
+                const appKey = Uint8Array.from(raw, (ch) => ch.charCodeAt(0));
+                const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: appKey });
+                const res = await fetch("/api/push/subscribe", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(sub.toJSON()) });
+                if (!res.ok) throw new Error("subscribe failed");
+                setNotifState("on");
+            }
+        } catch (e) {
+            console.error(e);
+            alert("Gagal mengatur notifikasi. Coba lagi.");
+        } finally {
+            setNotifBusy(false);
+        }
+    };
+
+    type Tab = "home" | "history" | "add" | "invest" | "profile";
+    const [tab, setTab] = useState<Tab>("home");
+    const changeTab = (t: Tab) => { setTab(t); window.scrollTo({ top: 0 }); };
     const [transactions, setTransactions] = useState<Transaction[]>([]);
     const [description, setDescription] = useState("");
     const [amount, setAmount] = useState<number | "">("");
@@ -288,6 +342,7 @@ export default function Dashboard() {
                     setTransactions([saved, ...transactions]);
                 }
                 resetForm();
+                changeTab("history");
             } else {
                 alert("Gagal menyimpan transaksi: " + (saved.error || "Unknown error"));
             }
@@ -420,6 +475,7 @@ export default function Dashboard() {
         }
 
         setEditingId(t.id);
+        setTab("add");
 
         // Scroll to top to see form
         window.scrollTo({ top: 0, behavior: "smooth" });
@@ -540,7 +596,9 @@ export default function Dashboard() {
     };
 
     return (
-        <main className="min-h-screen bg-gray-50 pb-20">
+        <main className={`min-h-screen bg-gray-50 ${isApp ? "pb-28" : "pb-20"}`}>
+            {!isApp && (
+                <>
             {/* Navbar */}
             <nav className="w-full bg-white/80 backdrop-blur-md border-b border-gray-200 sticky top-0 z-10">
                 <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -611,9 +669,32 @@ export default function Dashboard() {
                 </div>
             </div>
 
+                </>
+            )}
+
+            {/* Slim top bar: logo + month picker (hidden on form/invest/profile) */}
+            {isApp && (tab === "home" || tab === "history") && (
+                <header className="sticky top-0 z-20 bg-white/90 backdrop-blur-md border-b border-gray-200 pt-[env(safe-area-inset-top)]">
+                    <div className="max-w-5xl mx-auto px-4 h-14 flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                            <Image src="/logo.png" alt="Budgetly Logo" width={32} height={32} className="object-contain rounded-lg" />
+                            <h1 className="text-lg font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-violet-600">Budgetly</h1>
+                        </div>
+                        <button
+                            ref={monthBtnRef}
+                            onClick={openMonthPicker}
+                            className="flex items-center gap-2 bg-indigo-50 hover:bg-indigo-100 border border-indigo-100 text-indigo-700 rounded-xl px-3 py-1.5 text-sm font-semibold"
+                        >
+                            <Calendar className="w-4 h-4" />
+                            <span>{displayMonthLabel()}</span>
+                            <ChevronDown className={`w-3.5 h-3.5 transition-transform text-indigo-400 ${showMonthPicker ? "rotate-180" : ""}`} />
+                        </button>
+                    </div>
+                </header>
+            )}
             <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
 
-                {/* Hero / Balance Section */}
+                <div className={showTab("home") ? "space-y-8" : "hidden"}>
                 <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-indigo-600 via-purple-600 to-violet-600 p-8 text-white shadow-xl shadow-indigo-200">
                     <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
                         <div className="space-y-4">
@@ -691,8 +772,9 @@ export default function Dashboard() {
 
                 {/* Charts Section */}
                 <FinancialChart transactions={filteredByMonth} month={selectedMonth} />
+                </div>
 
-                {/* 📈 Investasi & Jadwal Otomatis Section */}
+                <div className={showTab("invest") ? "" : "hidden"}>
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                     <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
                         <h3 className="text-lg font-semibold text-gray-800 flex items-center gap-2 mb-4">
@@ -786,11 +868,44 @@ export default function Dashboard() {
                     </div>
                 </div>
 
-                {/* Main Content Grid */}
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                </div>
+                {/* Profile tab */}
+                <div className={`max-w-xl w-full mx-auto space-y-4 ${isApp && tab === "profile" ? "" : "hidden"}`}>
+                    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 flex items-center gap-4">
+                        <UserButton afterSignOutUrl="/" appearance={{ elements: { avatarBox: "w-14 h-14" } }} />
+                        <div className="min-w-0">
+                            <p className="font-semibold text-gray-900 truncate">{user?.fullName || user?.username || "Pengguna"}</p>
+                            <p className="text-sm text-gray-500 truncate">{user?.primaryEmailAddress?.emailAddress}</p>
+                            <p className="text-xs text-indigo-500 mt-0.5">Ketuk avatar untuk kelola akun / keluar</p>
+                        </div>
+                    </div>
+                    <button onClick={() => setShowTelegramModal(true)} className="w-full bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex items-center gap-3 text-left">
+                        <span className="w-10 h-10 rounded-xl bg-sky-50 flex items-center justify-center"><Send className="w-5 h-5 text-sky-500" /></span>
+                        <span className="flex-1"><span className="block font-medium text-gray-900">Bot Telegram</span><span className="block text-xs text-gray-500">Sambungkan akun ke bot Telegram</span></span>
+                        <ChevronDown className="w-4 h-4 text-gray-400 -rotate-90" />
+                    </button>
+                    {notifState !== "unsupported" && (
+                        <button onClick={toggleNotifications} disabled={notifBusy || notifState === "denied"} className="w-full bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex items-center gap-3 text-left disabled:opacity-70">
+                            <span className="w-10 h-10 rounded-xl bg-amber-50 flex items-center justify-center"><Bell className="w-5 h-5 text-amber-500" /></span>
+                            <span className="flex-1">
+                                <span className="block font-medium text-gray-900">Notifikasi Pengingat</span>
+                                <span className="block text-xs text-gray-500">{notifState === "denied" ? "Diblokir. Aktifkan izin notifikasi di pengaturan HP" : "Ingatkan jadwal tagihan/transfer (H-1 & hari-H)"}</span>
+                            </span>
+                            <span className={`w-11 h-6 rounded-full p-0.5 transition-colors ${notifState === "on" ? "bg-indigo-600" : "bg-gray-300"}`}>
+                                <span className={`block w-5 h-5 rounded-full bg-white transition-transform ${notifState === "on" ? "translate-x-5" : ""}`} />
+                            </span>
+                        </button>
+                    )}
+                    <a href="https://trakteer.id/michail.kx" target="_blank" rel="noopener noreferrer" className="w-full bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex items-center gap-3">
+                        <span className="w-10 h-10 rounded-xl bg-rose-50 flex items-center justify-center"><Coffee className="w-5 h-5 text-rose-500" /></span>
+                        <span className="flex-1"><span className="block font-medium text-gray-900">Traktir Kopi</span><span className="block text-xs text-gray-500">Dukung pengembangan Budgetly ☕</span></span>
+                        <ChevronDown className="w-4 h-4 text-gray-400 -rotate-90" />
+                    </a>
+                </div>
+                <div className={isApp ? "grid grid-cols-1 gap-8" : "grid grid-cols-1 lg:grid-cols-3 gap-8"}>
 
                     {/* Left Column: Input Form */}
-                    <div className="lg:col-span-1 space-y-6">
+                    <div className={isApp ? `max-w-xl w-full mx-auto space-y-6 ${tab === "add" ? "" : "hidden"}` : "lg:col-span-1 space-y-6"}>
                         <div className={`bg-white rounded-2xl shadow-sm border p-6 transition-colors ${editingId ? 'border-indigo-300 ring-2 ring-indigo-500/10' : 'border-gray-100'}`}>
 
                             <div className="flex justify-between items-center mb-4">
@@ -1066,7 +1181,7 @@ export default function Dashboard() {
                     </div>
 
                     {/* Right Column: List & History */}
-                    <div className="lg:col-span-2 space-y-6">
+                    <div className={isApp ? `space-y-6 ${tab === "history" ? "" : "hidden"}` : "lg:col-span-2 space-y-6"}>
                         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 min-h-[500px]">
                             <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-8">
                                 <h3 className="text-lg font-semibold text-gray-800 flex items-center gap-2 shrink-0">
@@ -1340,6 +1455,33 @@ export default function Dashboard() {
                 </div>
             </div>
 
+            {/* Bottom Navigation (mobile-app style) */}
+            {isApp && <nav className="fixed bottom-0 inset-x-0 z-30 bg-white/95 backdrop-blur-md border-t border-gray-200 pb-[env(safe-area-inset-bottom)]">
+                <div className="max-w-md mx-auto grid grid-cols-5 items-end h-16 px-2">
+                    {([
+                        { id: "home", label: "Beranda", Icon: Home },
+                        { id: "history", label: "Riwayat", Icon: History },
+                    ] as const).map(({ id, label, Icon }) => (
+                        <button key={id} onClick={() => changeTab(id)} className={`flex flex-col items-center justify-center gap-0.5 h-full text-[11px] font-medium ${tab === id ? "text-indigo-600" : "text-gray-400"}`}>
+                            <Icon className="w-6 h-6" />
+                            {label}
+                        </button>
+                    ))}
+                    <div className="flex justify-center">
+                        <button onClick={() => changeTab("add")} aria-label="Tambah Transaksi" className={`-mt-6 w-14 h-14 rounded-full flex items-center justify-center text-white shadow-lg shadow-indigo-300 active:scale-95 transition-transform ${tab === "add" ? "bg-violet-700" : "bg-gradient-to-br from-indigo-600 to-violet-600"}`}>
+                            <Plus className="w-7 h-7" />
+                        </button>
+                    </div>
+                    <button onClick={() => changeTab("invest")} className={`flex flex-col items-center justify-center gap-0.5 h-full text-[11px] font-medium ${tab === "invest" ? "text-indigo-600" : "text-gray-400"}`}>
+                        <TrendingUp className="w-6 h-6" />
+                        Investasi
+                    </button>
+                    <button onClick={() => changeTab("profile")} className={`flex flex-col items-center justify-center gap-0.5 h-full text-[11px] font-medium ${tab === "profile" ? "text-indigo-600" : "text-gray-400"}`}>
+                        <User className="w-6 h-6" />
+                        Profil
+                    </button>
+                </div>
+            </nav>}
             {/* 📅 Month Picker Dropdown — rendered at root to escape navbar stacking context */}
             {showMonthPicker && (
                 <div

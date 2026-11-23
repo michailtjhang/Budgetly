@@ -48,6 +48,17 @@ model Schedule {
   updatedAt   DateTime  @updatedAt
 }
 
+model PushSubscription {
+  id        Int      @id @default(autoincrement())
+  userId    String
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
 model TelegramUser {
   id               Int      @id @default(autoincrement())
   telegramId       String   @unique

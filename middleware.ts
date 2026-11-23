@@ -2,6 +2,7 @@ import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 
 const isPublicRoute = createRouteMatcher([
   "/api/telegram(.*)",
+  "/api/cron(.*)", // dilindungi CRON_SECRET di dalam route
 ]);
 
 export default clerkMiddleware(async (auth, req) => {
